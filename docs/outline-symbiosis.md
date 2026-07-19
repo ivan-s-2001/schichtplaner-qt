@@ -55,7 +55,7 @@ Caddy входит в основной `docker-compose.symbiosis.yml` и явл�
 - `https://outline.qt.local` → `outline:3000`;
 - `https://schedule.qt.local` → `schedule:3000`.
 
-Outline получает `X-Forwarded-Proto: https`, работает с `FORCE_HTTPS=true` и доверяет заголовкам встроенного proxy. Это необходимо для корректных secure cookies и CSRF.
+Outline получает `X-Forwarded-Proto: https`, работает с `FORCE_HTTPS=false` и доверяет заголовкам встроенного proxy. TLS завершается на Caddy, а `X-Forwarded-Proto: https` обеспечивает корректные secure cookies и CSRF, не ломая внутренний healthcheck.
 
 `OUTLINE_SECRET_KEY`, `OUTLINE_UTILS_SECRET`, `NEXTAUTH_SECRET` и `SCHEDULE_SSO_SECRET` создаются один раз в `.env.symbiosis` и не должны меняться при пересборке. Скрипт импортирует существующий `SECRET_KEY` из `outline.qt.local/.env`, чтобы обновление не аннулировало текущие сессии и зашифрованные данные.
 
