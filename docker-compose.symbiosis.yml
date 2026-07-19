@@ -1,0 +1,141 @@
+name: outline-schichtplaner
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: outline
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-outline}
+      POSTGRES_DB: outline
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - shared_postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U outline -d outline"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  postgres-init:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-outline}
+    command:
+      - sh
+      - -ec
+      - |
+        psql -h postgres -U outline -d outline \
+          -c 'CREATE SCHEMA IF NOT EXISTS schedule AUTHORIZATION outline;' \
+          -c 'GRANT ALL ON SCHEMA schedule TO outline;'
+    restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - shared_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
+    volumes:
+      - schedule_minio_data:/data
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    restart: unless-stopped
+
+  outline:
+    build:
+      context: ../Outline-osp
+      dockerfile: Dockerfile.symbiosis
+    env_file:
+      - ../Outline-osp/.env
+      - ./.env.symbiosis
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      URL: ${OUTLINE_URL:-http://localhost:3000}
+      DATABASE_URL: postgresql://outline:${POSTGRES_PASSWORD:-outline}@postgres:5432/outline
+      PGSSLMODE: disable
+      REDIS_URL: redis://redis:6379/0
+      FILE_STORAGE: local
+      FILE_STORAGE_LOCAL_ROOT_DIR: /var/lib/outline/data
+      FORCE_HTTPS: "false"
+      SCHEDULE_URL: ${SCHEDULE_URL:-http://localhost:41873}
+      SCHEDULE_SSO_SECRET: ${SCHEDULE_SSO_SECRET}
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    ports:
+      - "${OUTLINE_PORT:-3000}:3000"
+    volumes:
+      - outline_file_data:/var/lib/outline/data
+    restart: unless-stopped
+
+  schedule-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrator
+    environment:
+      DATABASE_URL: postgresql://outline:${POSTGRES_PASSWORD:-outline}@postgres:5432/outline?schema=schedule
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+    restart: "no"
+
+  schedule:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    env_file:
+      - ./.env.symbiosis
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: postgresql://outline:${POSTGRES_PASSWORD:-outline}@postgres:5432/outline?schema=schedule
+      NEXTAUTH_URL: ${SCHEDULE_URL:-http://localhost:41873}
+      APP_URL: ${SCHEDULE_URL:-http://localhost:41873}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      SCHEDULE_SSO_SECRET: ${SCHEDULE_SSO_SECRET}
+      ALLOW_EMAIL_LOGIN: "false"
+      REDIS_URL: redis://redis:6379/1
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-schichtplaner}
+    depends_on:
+      schedule-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    ports:
+      - "${SCHEDULE_PORT:-41873}:3000"
+    restart: unless-stopped
+
+volumes:
+  shared_postgres_data:
+  shared_redis_data:
+  outline_file_data:
+  schedule_minio_data:
