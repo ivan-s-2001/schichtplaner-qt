@@ -100,7 +100,7 @@ export function EmailAccessGate({
         className="min-h-screen bg-background text-foreground"
       >
         <div className="h-0.5 w-full overflow-hidden bg-muted">
-          <div className="h-full w-1/3 animate-[outline-loading_1.1s_ease-in-out_infinite] bg-primary" />
+          <div className="h-full w-full animate-pulse bg-primary" />
         </div>
       </main>
     );
