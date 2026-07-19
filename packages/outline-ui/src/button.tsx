@@ -4,8 +4,26 @@ import * as React from "react";
 import { Slot } from "radix-ui";
 import { cx } from "./utils";
 
-export type ButtonVariant = "default" | "neutral" | "ghost" | "danger";
-export type ButtonSize = "default" | "compact" | "icon";
+export type ButtonVariant =
+  | "default"
+  | "neutral"
+  | "outline"
+  | "secondary"
+  | "ghost"
+  | "link"
+  | "danger"
+  | "destructive";
+
+export type ButtonSize =
+  | "default"
+  | "compact"
+  | "xs"
+  | "sm"
+  | "lg"
+  | "icon"
+  | "icon-xs"
+  | "icon-sm"
+  | "icon-lg";
 
 export type ButtonProps = React.ComponentProps<"button"> & {
   asChild?: boolean;
@@ -21,6 +39,9 @@ export function Button({
   ...props
 }: ButtonProps) {
   const Component = asChild ? Slot.Root : "button";
+  const neutral = variant === "neutral" || variant === "outline";
+  const secondary = variant === "secondary";
+  const danger = variant === "danger" || variant === "destructive";
 
   return (
     <Component
@@ -29,11 +50,16 @@ export function Button({
       data-size={size}
       className={cx(
         "qto-button",
-        variant === "neutral" && "qto-button--neutral",
+        neutral && "qto-button--neutral",
+        secondary && "qto-button--secondary",
         variant === "ghost" && "qto-button--ghost",
-        variant === "danger" && "qto-button--danger",
-        size === "compact" && "h-6 px-2 text-xs leading-6",
-        size === "icon" && "qto-button--icon",
+        variant === "link" && "qto-button--link",
+        danger && "qto-button--danger",
+        (size === "compact" || size === "xs") && "qto-button--xs",
+        size === "lg" && "qto-button--lg",
+        (size === "icon" || size === "icon-sm") && "qto-button--icon",
+        size === "icon-xs" && "qto-button--icon-xs",
+        size === "icon-lg" && "qto-button--icon-lg",
         className
       )}
       {...props}
