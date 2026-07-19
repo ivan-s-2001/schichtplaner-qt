@@ -7,8 +7,6 @@ datasource db {
   schemas  = ["public", "schedule"]
 }
 
-// Read-only compatibility view over public.users. No personal data is stored
-// in the schedule schema.
 model User {
   id            String    @id @db.Uuid
   email         String?
@@ -24,22 +22,21 @@ model User {
   createdAt     DateTime
   updatedAt     DateTime
 
-  memberships   OrganizationMember[]
-  notes         EmployeeNote[]       @relation("subject")
-  authoredNotes EmployeeNote[]       @relation("author")
-  bookings      Booking[]
-  timeRecords   TimeRecord[]
-  absences      Absence[]
-  modRequests   ModRequest[]
-  liveLogs      LiveLog[]
-  dayOffs       ScheduleDayOff[]
+  memberships        OrganizationMember[]
+  divisionMemberships DivisionMember[]
+  notes              EmployeeNote[]       @relation("subject")
+  authoredNotes      EmployeeNote[]       @relation("author")
+  bookings           Booking[]
+  timeRecords        TimeRecord[]
+  absences           Absence[]
+  modRequests        ModRequest[]
+  liveLogs           LiveLog[]
+  dayOffs            ScheduleDayOff[]
 
   @@map("users")
   @@schema("schedule")
 }
 
-// Read-only view over the single Outline workspace. It is retained only as a
-// compatibility projection for existing scheduling code, not as stored data.
 model Organization {
   id                 String             @id @db.Uuid
   name               String
@@ -63,7 +60,6 @@ model Organization {
   @@schema("schedule")
 }
 
-// Read-only view over public.users.
 model OrganizationMember {
   id              String   @id @db.Uuid
   organizationId  String   @db.Uuid
@@ -122,7 +118,6 @@ model Branch {
   @@schema("schedule")
 }
 
-// Read-only view over public.groups. Group UUID is the department UUID.
 model Division {
   id             String   @id @db.Uuid
   organizationId String   @db.Uuid
@@ -142,7 +137,6 @@ model Division {
   @@schema("schedule")
 }
 
-// Read-only view over public.group_users.
 model DivisionMember {
   divisionId String @db.Uuid
   userId     String @db.Uuid
@@ -457,14 +451,14 @@ model EmployeeNote {
 }
 
 model ScheduleDayNote {
-  id        String   @id
+  id         String   @id
   scheduleId String
-  dayOfWeek Int
-  note      String
-  status    String   @default("PLANNED")
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  dayOfWeek  Int
+  note       String
+  status     String   @default("PLANNED")
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
 
@@ -474,12 +468,12 @@ model ScheduleDayNote {
 }
 
 model ScheduleDayOff {
-  id        String   @id
+  id         String   @id
   scheduleId String
-  userId    String   @db.Uuid
-  dayOfWeek Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  userId     String   @db.Uuid
+  dayOfWeek  Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id])
