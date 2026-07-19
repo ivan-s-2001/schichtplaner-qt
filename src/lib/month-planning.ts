@@ -39,7 +39,9 @@ type ShiftPoolRow = {
 
 export function getDefaultPlanningMonth() {
   const now = new Date();
-  const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const target = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+  );
   return { year: target.getUTCFullYear(), month: target.getUTCMonth() + 1 };
 }
 
@@ -63,16 +65,26 @@ export function getMonthBounds(year: number, month: number) {
   };
 }
 
-export function isDateInPlanningMonth(value: string, year: number, month: number) {
+export function isDateInPlanningMonth(
+  value: string,
+  year: number,
+  month: number
+) {
   const bounds = getMonthBounds(year, month);
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && value >= bounds.start && value <= bounds.end;
+  return (
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    value >= bounds.start &&
+    value <= bounds.end
+  );
 }
 
 export function getDefaultPreferenceDeadline(year: number, month: number) {
   return new Date(Date.UTC(year, month - 2, 20, 20, 59, 59, 999));
 }
 
-export function toPlanningPeriod(row: MonthPlanningPeriodRow): MonthPlanningPeriod {
+export function toPlanningPeriod(
+  row: MonthPlanningPeriodRow
+): MonthPlanningPeriod {
   return {
     ...row,
     preferenceDeadline: row.preferenceDeadline?.toISOString() ?? null,
@@ -120,6 +132,14 @@ export async function requireMonthPlanningAccess(
     return {
       error: NextResponse.json(
         { error: "Планирование месяца доступно только руководителю" },
+        { status: 403 }
+      ),
+    };
+  }
+  if (!managerOnly && !canManage && !division.isPrimary) {
+    return {
+      error: NextResponse.json(
+        { error: "Пожелания можно отправить только для основного подразделения" },
         { status: 403 }
       ),
     };
@@ -219,7 +239,11 @@ export async function ensurePlanningPeriod(input: {
   year: number;
   month: number;
 }) {
-  const existing = await findPlanningPeriod(input.divisionId, input.year, input.month);
+  const existing = await findPlanningPeriod(
+    input.divisionId,
+    input.year,
+    input.month
+  );
   if (existing) return existing;
 
   const id = randomUUID();
@@ -236,7 +260,11 @@ export async function ensurePlanningPeriod(input: {
     ON CONFLICT ("divisionId", "year", "month") DO NOTHING
   `;
 
-  const created = await findPlanningPeriod(input.divisionId, input.year, input.month);
+  const created = await findPlanningPeriod(
+    input.divisionId,
+    input.year,
+    input.month
+  );
   if (!created) throw new Error("Не удалось создать период планирования");
   return created;
 }
