@@ -1,0 +1,187 @@
+/*
+ * Weekly SHIFT and STABLE schedules intentionally share one visual grammar.
+ * Their business rules differ, but tables, cells and editor surfaces should not.
+ */
+
+.schedule-equal-day-columns > div:has(> table[class*="min-w-[1080px]"]),
+.schedule-equal-day-columns > div:has(> table[class*="min-w-[1100px]"]) {
+  overflow: auto;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px !important;
+  background: var(--background) !important;
+  box-shadow: none !important;
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1080px]"],
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] {
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1080px]"] thead th,
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] thead th {
+  border-color: var(--border) !important;
+  background: var(--outline-host-neutral) !important;
+  color: var(--foreground) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1080px]"] thead th.bg-emerald-700,
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] thead th.bg-emerald-700,
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] thead th:nth-child(8),
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] thead th:nth-child(9) {
+  background: color-mix(
+    in srgb,
+    var(--outline-success) 14%,
+    var(--background)
+  ) !important;
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1080px]"] tbody td,
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody td {
+  border-color: var(--border) !important;
+  background-color: var(--background);
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1080px]"] tbody td:first-child,
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody td:first-child {
+  background: var(--background) !important;
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1080px]"] tbody tr[class*="bg-indigo"],
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody tr[class*="bg-primary"] {
+  background: color-mix(in srgb, var(--primary) 7%, var(--background)) !important;
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1080px]"] tbody tr[class*="bg-indigo"] td:first-child,
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody tr[class*="bg-primary"] td:first-child {
+  background: color-mix(in srgb, var(--primary) 7%, var(--background)) !important;
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1080px]"] tbody td[class*="bg-emerald"],
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody td[class*="bg-emerald"],
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody td:nth-child(8),
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody td:nth-child(9) {
+  background: color-mix(
+    in srgb,
+    var(--outline-success) 7%,
+    var(--background)
+  ) !important;
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1080px]"] [class*="bg-indigo-600"] {
+  background: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1080px]"] tbody button.relative {
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  transition:
+    border-color 120ms ease-out,
+    box-shadow 120ms ease-out,
+    filter 120ms ease-out;
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1080px]"] tbody button.relative:not(:disabled):hover {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 1px var(--primary) !important;
+  filter: brightness(0.99);
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody td:nth-child(n + 3):not(:last-child) {
+  vertical-align: middle;
+  text-align: center;
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody td:nth-child(n + 3):not(:last-child) > div {
+  display: inline-flex;
+  min-height: 2.75rem;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--foreground) 2%, var(--background));
+  padding: 0.35rem;
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody td:nth-child(n + 3):not(:last-child) > span {
+  display: inline-flex;
+  min-height: 2.75rem;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--foreground) 2%, var(--background));
+  padding: 0.35rem;
+}
+
+/* STABLE editor uses the same overlay, surface and section rhythm as Radix dialogs. */
+.schedule-equal-day-columns > div.fixed.inset-0.z-50 {
+  background: rgb(0 0 0 / 25%) !important;
+  backdrop-filter: blur(1px);
+}
+
+.schedule-equal-day-columns > div.fixed.inset-0.z-50 > section {
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  background: var(--background) !important;
+  box-shadow:
+    0 4px 8px rgb(0 0 0 / 8%),
+    0 30px 40px rgb(0 0 0 / 8%) !important;
+}
+
+.schedule-equal-day-columns > div.fixed.inset-0.z-50 > section > div.mt-5.space-y-3 > div {
+  border-color: var(--border) !important;
+  border-radius: 6px !important;
+  background: color-mix(in srgb, var(--foreground) 2%, var(--background));
+}
+
+.schedule-equal-day-columns > div.fixed.inset-0.z-50 input[type="number"],
+.schedule-equal-day-columns > div.fixed.inset-0.z-50 input[type="time"] {
+  border-color: var(--input) !important;
+  border-radius: 4px !important;
+  background: var(--background) !important;
+  color: var(--foreground) !important;
+  box-shadow: none !important;
+}
+
+.schedule-equal-day-columns > div.fixed.inset-0.z-50 input[type="checkbox"] {
+  accent-color: var(--primary);
+}
+
+/* Shift assignment dialog follows the same neutral section styling. */
+[data-slot="dialog-content"] .bg-slate-50,
+[data-slot="dialog-content"] .bg-slate-100,
+[data-slot="dialog-content"] .dark\:bg-slate-950 {
+  background: color-mix(in srgb, var(--foreground) 3%, var(--background)) !important;
+}
+
+[data-slot="dialog-content"] .border-slate-300,
+[data-slot="dialog-content"] .border-slate-200 {
+  border-color: var(--border) !important;
+}
+
+[data-slot="dialog-content"] .text-slate-900,
+[data-slot="dialog-content"] .text-slate-700,
+[data-slot="dialog-content"] .dark\:text-slate-100 {
+  color: var(--foreground) !important;
+}
+
+[data-slot="dialog-content"] .text-slate-600,
+[data-slot="dialog-content"] .text-slate-500 {
+  color: var(--muted-foreground) !important;
+}
+
+.schedule-editor-tool {
+  border-radius: 6px;
+  box-shadow: none;
+}

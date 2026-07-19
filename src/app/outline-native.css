@@ -1,0 +1,36 @@
+[data-outline-native-shell] h1 {
+  font-size: 1.75rem !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.025em !important;
+}
+
+[data-outline-native-shell] h2,
+[data-outline-native-shell] h3 {
+  font-weight: 600 !important;
+  letter-spacing: -0.015em !important;
+}
+
+[data-outline-native-shell] [data-slot="card"]:hover {
+  box-shadow: none !important;
+}
+
+[data-outline-native-shell] table {
+  font-size: 14px;
+}
+
+[data-outline-native-shell] th {
+  font-weight: 600;
+}
+
+[data-outline-native-shell] input,
+[data-outline-native-shell] textarea,
+[data-outline-native-shell] select,
+[data-outline-native-shell] button {
+  font-family: inherit;
+}
+
+@media (max-width: 640px) {
+  [data-outline-native-shell] h1 {
+    font-size: 1.5rem !important;
+  }
+}
