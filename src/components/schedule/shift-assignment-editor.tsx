@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { useFormatter, useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
 import { CalendarRange, Loader2, Pencil, Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -55,6 +56,7 @@ interface ShiftAssignmentEditorProps {
 
 type EditorMode = "view" | "edit";
 type CellKind = "SHIFT" | "DAY_OFF" | "VACATION" | "SICK";
+type EditableCellKind = Exclude<CellKind, "VACATION">;
 
 type ShiftPoolResponse = {
   templates: ShiftTemplate[];
@@ -89,6 +91,7 @@ export function ShiftAssignmentEditor({
   onClose,
   onChanged,
 }: ShiftAssignmentEditorProps) {
+  const router = useRouter();
   const t = useTranslations("schedule.editor");
   const tGrid = useTranslations("schedule.grid");
   const tPool = useTranslations("schedule.pool");
@@ -111,7 +114,7 @@ export function ShiftAssignmentEditor({
       if (!response.ok) throw new Error(tErrors("loadSchedule"));
       return response.json();
     },
-    enabled: target !== null,
+    enabled: target !== null && currentKind(target) !== "VACATION",
   });
 
   const templates = poolData?.templates ?? [...DEFAULT_SHIFT_POOL];
@@ -125,11 +128,13 @@ export function ShiftAssignmentEditor({
   const hasValue = Boolean(
     target?.assignment || target?.dayOff || target?.absence
   );
+  const displayedKind = currentKind(target);
+  const isVacation = displayedKind === "VACATION";
+  const canEditHere = canEdit && !isVacation;
 
-  const cellKindOptions: Array<{ value: CellKind; label: string }> = [
+  const cellKindOptions: Array<{ value: EditableCellKind; label: string }> = [
     { value: "SHIFT", label: t("shift") },
     { value: "DAY_OFF", label: t("dayOff") },
-    { value: "VACATION", label: t("vacation") },
     { value: "SICK", label: t("sickLeave") },
   ];
 
@@ -144,7 +149,6 @@ export function ShiftAssignmentEditor({
 
     const targetKind = currentKind(target);
     const selectedDate = format(target.date, "yyyy-MM-dd");
-
     setMode(hasValue ? "view" : "edit");
     setKind(targetKind);
     setSelectedTemplateId(currentTemplate?.id ?? "");
@@ -176,6 +180,9 @@ export function ShiftAssignmentEditor({
 
   async function clearCurrentValue() {
     if (!target) return;
+    if (target.absence && absenceKind(target.absence) === "VACATION") {
+      throw new Error("Отпуск изменяется на отдельной странице «Отпуск»");
+    }
 
     if (target.assignment) {
       const response = await fetch("/api/schedule-assignments", {
@@ -210,6 +217,9 @@ export function ShiftAssignmentEditor({
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!target) throw new Error(tErrors("invalidData"));
+      if (kind === "VACATION") {
+        throw new Error("Отпуск добавляется на отдельной странице «Отпуск»");
+      }
 
       if (kind === "SHIFT") {
         if (!selectedTemplateId) throw new Error(tErrors("invalidData"));
@@ -233,8 +243,6 @@ export function ShiftAssignmentEditor({
         return;
       }
 
-      if (target.absence && kind === "DAY_OFF") await clearCurrentValue();
-
       const response = await fetch("/api/schedule-cell-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -243,17 +251,12 @@ export function ShiftAssignmentEditor({
           userId: target.user.id,
           dayOfWeek: target.dayOfWeek,
           type: kind,
-          dateFrom:
-            kind === "VACATION" || kind === "SICK" ? dateFrom : undefined,
-          dateTo:
-            kind === "VACATION" || kind === "SICK" ? dateTo : undefined,
+          dateFrom: kind === "SICK" ? dateFrom : undefined,
+          dateTo: kind === "SICK" ? dateTo : undefined,
           absenceId:
-            target.absence && (kind === "VACATION" || kind === "SICK")
-              ? target.absence.id
-              : undefined,
+            target.absence && kind === "SICK" ? target.absence.id : undefined,
         }),
       });
-
       if (!response.ok) await readError(response, tErrors("save"));
     },
     onSuccess: async () => {
@@ -284,7 +287,6 @@ export function ShiftAssignmentEditor({
     assignment?.booking.overtimeMinutes ??
     0;
   const overtimeMinutes = overtimeBeforeMinutes + overtimeAfterMinutes;
-  const displayedKind = currentKind(target);
   const totalEditedOvertime =
     (Number(overtimeBeforeHours.replace(",", ".")) || 0) +
     (Number(overtimeAfterHours.replace(",", ".")) || 0);
@@ -293,9 +295,7 @@ export function ShiftAssignmentEditor({
     <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>
-            {hasValue ? t("view") : t("edit")}
-          </DialogTitle>
+          <DialogTitle>{hasValue ? t("view") : t("edit")}</DialogTitle>
           <DialogDescription>
             {target && (
               <>
@@ -311,7 +311,7 @@ export function ShiftAssignmentEditor({
           </DialogDescription>
         </DialogHeader>
 
-        {hasValue && (
+        {hasValue && !isVacation && (
           <div className="grid grid-cols-2 rounded-lg border bg-slate-100 p-1">
             <button
               type="button"
@@ -327,14 +327,14 @@ export function ShiftAssignmentEditor({
             </button>
             <button
               type="button"
-              disabled={!canEdit}
+              disabled={!canEditHere}
               onClick={() => setMode("edit")}
               className={cn(
                 "rounded-md px-3 py-2 text-sm font-medium transition",
                 mode === "edit"
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-500 hover:text-slate-900",
-                !canEdit && "cursor-not-allowed opacity-50"
+                !canEditHere && "cursor-not-allowed opacity-50"
               )}
             >
               {t("edit")}
@@ -344,32 +344,32 @@ export function ShiftAssignmentEditor({
 
         {mode === "view" && hasValue ? (
           <div className="space-y-4 py-2">
-            {displayedKind === "SHIFT" && assignment && currentTemplate ? (
+            {displayedKind === "SHIFT" && assignment ? (
               <div
                 className="rounded-lg border-2 p-6 text-center"
                 style={{
-                  backgroundColor: currentTemplate.color,
-                  color: currentTemplate.textColor,
+                  backgroundColor: currentTemplate?.color ?? "#E5E7EB",
+                  color: currentTemplate?.textColor ?? "#111827",
                   borderColor:
-                    currentTemplate.color === "#FFFFFF"
+                    currentTemplate?.color === "#FFFFFF"
                       ? "#94A3B8"
-                      : currentTemplate.color,
+                      : currentTemplate?.color ?? "#CBD5E1",
                 }}
               >
-                <div className="text-xl font-bold">{currentTemplate.name}</div>
-                <div className="mt-1 text-base font-semibold">
-                  {currentTemplate.label}
+                <div className="text-xl font-bold">
+                  {currentTemplate?.name ??
+                    assignment.shift.title ??
+                    `${assignment.shift.shiftFrom}–${assignment.shift.shiftTo}`}
                 </div>
-                {currentTemplate.description && (
-                  <div className="mt-3 text-sm font-medium opacity-90">
-                    {currentTemplate.description}
+                {currentTemplate?.label && (
+                  <div className="mt-1 text-base font-semibold">
+                    {currentTemplate.label}
                   </div>
                 )}
                 {overtimeMinutes > 0 ? (
                   <div className="mt-3 space-y-1 text-sm font-bold">
                     <div>
-                      {tGrid("overtimeTotal")}: +
-                      {formatHours(overtimeMinutes / 60)}
+                      {tGrid("overtimeTotal")}: +{formatHours(overtimeMinutes / 60)}
                     </div>
                     <div className="text-xs font-semibold opacity-80">
                       {tGrid("overtimeBefore")}: +
@@ -399,9 +399,7 @@ export function ShiftAssignmentEditor({
                 )}
               >
                 <div className="text-xl font-bold">
-                  {displayedKind === "VACATION"
-                    ? t("vacation")
-                    : t("sickLeave")}
+                  {displayedKind === "VACATION" ? t("vacation") : t("sickLeave")}
                 </div>
                 <div className="mt-3 flex items-center justify-center gap-2 text-sm font-medium">
                   <CalendarRange className="size-4" />
@@ -416,12 +414,17 @@ export function ShiftAssignmentEditor({
                     year: "numeric",
                   })}
                 </div>
+                {displayedKind === "VACATION" && (
+                  <p className="mt-4 text-sm text-slate-600">
+                    Период отпуска редактируется отдельно, а не через ячейку графика.
+                  </p>
+                )}
               </div>
             ) : null}
           </div>
         ) : (
           <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-3 gap-2">
               {cellKindOptions.map((option) => (
                 <button
                   key={option.value}
@@ -450,7 +453,6 @@ export function ShiftAssignmentEditor({
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {templates.map((template) => {
                       const selected = selectedTemplateId === template.id;
-
                       return (
                         <button
                           type="button"
@@ -499,7 +501,6 @@ export function ShiftAssignmentEditor({
                       step="0.5"
                       value={overtimeBeforeHours}
                       onChange={(event) => setOvertimeBeforeHours(event.target.value)}
-                      placeholder="0"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -514,7 +515,6 @@ export function ShiftAssignmentEditor({
                       step="0.5"
                       value={overtimeAfterHours}
                       onChange={(event) => setOvertimeAfterHours(event.target.value)}
-                      placeholder="0"
                     />
                   </div>
                   <div className="text-xs font-semibold text-slate-600 sm:col-span-2">
@@ -525,12 +525,13 @@ export function ShiftAssignmentEditor({
             ) : kind === "DAY_OFF" ? (
               <div className="rounded-lg border border-slate-300 bg-slate-50 p-6 text-center">
                 <div className="text-3xl font-bold">−</div>
-                <div className="mt-2 text-sm text-slate-600">
-                  {tGrid("dayOff")}
-                </div>
+                <div className="mt-2 text-sm text-slate-600">{tGrid("dayOff")}</div>
               </div>
             ) : (
               <div className="space-y-4 rounded-lg border bg-slate-50 p-4">
+                <p className="text-sm text-muted-foreground">
+                  Больничный по-прежнему можно указать непосредственно в графике.
+                </p>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="absence-date-from">{t("periodFrom")}</Label>
@@ -558,7 +559,7 @@ export function ShiftAssignmentEditor({
 
         <DialogFooter className="gap-2 sm:justify-between">
           <div>
-            {mode === "edit" && hasValue && canEdit && (
+            {mode === "edit" && hasValue && canEditHere && (
               <Button
                 type="button"
                 variant="destructive"
@@ -580,19 +581,29 @@ export function ShiftAssignmentEditor({
               {tCommon("close")}
             </Button>
 
-            {mode === "view" && hasValue && canEdit ? (
-              <Button type="button" onClick={() => setMode("edit")}>
+            {isVacation ? (
+              <Button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  router.push("/employees/absences");
+                }}
+              >
+                <CalendarRange className="size-4" />
+                Открыть страницу «Отпуск»
+              </Button>
+            ) : mode === "view" && hasValue && canEditHere ? (
+              <Button type="button" onClick={() => setMode("edit")}> 
                 <Pencil className="size-4" />
                 {t("edit")}
               </Button>
-            ) : mode === "edit" && canEdit ? (
+            ) : mode === "edit" && canEditHere ? (
               <Button
                 type="button"
                 disabled={
                   saveMutation.isPending ||
                   (kind === "SHIFT" && !selectedTemplateId) ||
-                  ((kind === "VACATION" || kind === "SICK") &&
-                    (!dateFrom || !dateTo))
+                  (kind === "SICK" && (!dateFrom || !dateTo))
                 }
                 onClick={() => saveMutation.mutate()}
               >
