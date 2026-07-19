@@ -3,6 +3,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import { OutlineThemeBridge } from "@/components/layout/outline-theme-bridge";
 import "./globals.css";
+import "./outline-native.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("meta");
