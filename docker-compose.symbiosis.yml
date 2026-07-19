@@ -5,7 +5,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: outline
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-outline}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: outline
     volumes:
       - shared_postgres_data:/var/lib/postgresql/data
@@ -30,7 +30,7 @@ services:
   mailpit:
     image: axllent/mailpit:latest
     ports:
-      - "${MAILPIT_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
     restart: unless-stopped
 
   outline:
@@ -43,15 +43,18 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      URL: ${OUTLINE_URL:-http://localhost:3000}
+      URL: ${OUTLINE_URL:-https://outline.qt.local}
       DEFAULT_LANGUAGE: ${OUTLINE_DEFAULT_LANGUAGE:-en_US}
-      DATABASE_URL: postgresql://outline:${POSTGRES_PASSWORD:-outline}@postgres:5432/outline
+      SECRET_KEY: ${OUTLINE_SECRET_KEY}
+      UTILS_SECRET: ${OUTLINE_UTILS_SECRET}
+      DATABASE_URL: postgresql://outline:${POSTGRES_PASSWORD}@postgres:5432/outline
       PGSSLMODE: disable
       REDIS_URL: redis://redis:6379/0
       FILE_STORAGE: local
       FILE_STORAGE_LOCAL_ROOT_DIR: /var/lib/outline/data
-      FORCE_HTTPS: "false"
-      SCHEDULE_URL: ${SCHEDULE_URL:-http://localhost:41873}
+      FORCE_HTTPS: "true"
+      PROXY_HEADERS_TRUSTED: "true"
+      SCHEDULE_URL: ${SCHEDULE_URL:-https://schedule.qt.local}
       SCHEDULE_SSO_SECRET: ${SCHEDULE_SSO_SECRET}
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
@@ -70,7 +73,7 @@ services:
       mailpit:
         condition: service_started
     ports:
-      - "${OUTLINE_PORT:-3000}:3000"
+      - "127.0.0.1:${OUTLINE_PORT:-3000}:3000"
     volumes:
       - outline_file_data:/var/lib/outline/data
     healthcheck:
@@ -91,11 +94,11 @@ services:
       NODE_ENV: production
       PORT: 3000
       HOSTNAME: 0.0.0.0
-      DATABASE_URL: postgresql://outline:${POSTGRES_PASSWORD:-outline}@postgres:5432/outline
+      DATABASE_URL: postgresql://outline:${POSTGRES_PASSWORD}@postgres:5432/outline
       DATABASE_SCHEMA: schedule
-      NEXTAUTH_URL: ${SCHEDULE_URL:-http://localhost:41873}
-      AUTH_URL: ${SCHEDULE_URL:-http://localhost:41873}
-      APP_URL: ${SCHEDULE_URL:-http://localhost:41873}
+      NEXTAUTH_URL: ${SCHEDULE_URL:-https://schedule.qt.local}
+      AUTH_URL: ${SCHEDULE_URL:-https://schedule.qt.local}
+      APP_URL: ${SCHEDULE_URL:-https://schedule.qt.local}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       AUTH_SECRET: ${NEXTAUTH_SECRET}
       AUTH_TRUST_HOST: "true"
@@ -108,10 +111,38 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "${SCHEDULE_PORT:-41873}:3000"
+      - "127.0.0.1:${SCHEDULE_PORT:-41873}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  proxy:
+    image: caddy:2-alpine
+    container_name: outline-schedule-proxy
+    environment:
+      OUTLINE_DOMAIN: ${OUTLINE_DOMAIN:-outline.qt.local}
+      SCHEDULE_DOMAIN: ${SCHEDULE_DOMAIN:-schedule.qt.local}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.symbiosis:/etc/caddy/Caddyfile:ro
+      - shared_caddy_data:/data
+      - shared_caddy_config:/config
+    depends_on:
+      outline:
+        condition: service_healthy
+      schedule:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   shared_postgres_data:
   shared_redis_data:
   outline_file_data:
+  shared_caddy_data:
+  shared_caddy_config:
