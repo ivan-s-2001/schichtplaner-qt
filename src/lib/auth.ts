@@ -1,31 +1,15 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { PrismaAdapter } from "@auth/prisma-adapter";
 import { db } from "@/lib/db";
-import { z } from "zod";
 import {
-  syncOutlineUser,
+  loadOutlineSessionUser,
   verifyOutlineToken,
 } from "@/lib/outline-integration";
-import {
-  captureScheduleLeadershipRoles,
-  restoreScheduleLeadershipRoles,
-} from "@/lib/outline-role-preservation";
 import { consumeOutlineSsoToken } from "@/lib/outline-sso-token";
-import { syncOutlineWorkspace } from "@/lib/outline-workspace-sync";
-
-const ADMIN_EMAIL = "admin@qksr.ru";
-
-const loginSchema = z.object({
-  email: z.string().email().transform((value) => value.trim().toLowerCase()),
-});
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(db),
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
-  pages: {
-    signIn: "/",
-  },
+  pages: { signIn: "/" },
   providers: [
     Credentials({
       name: "Outline SSO",
@@ -43,29 +27,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           try {
             const payload = verifyOutlineToken(token);
             await consumeOutlineSsoToken(payload);
-
-            const preservedRoles = await captureScheduleLeadershipRoles();
-            const membership = await syncOutlineUser(payload);
-            await syncOutlineWorkspace(
-              payload.teamId,
-              membership.organizationId
-            );
-            await restoreScheduleLeadershipRoles(
-              membership.organizationId,
-              preservedRoles
-            );
-
-            const synchronizedUser = await db.user.findUnique({
-              where: { id: membership.user.id },
-            });
-            if (!synchronizedUser) return null;
+            const user = await loadOutlineSessionUser(payload);
 
             return {
-              id: synchronizedUser.id,
-              email: synchronizedUser.email,
-              name:
-                `${synchronizedUser.firstName} ${synchronizedUser.lastName}`.trim() ||
-                synchronizedUser.email,
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              image: user.avatarUrl,
             };
           } catch (error) {
             console.error("Outline SSO failed", error);
@@ -75,48 +43,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (process.env.ALLOW_EMAIL_LOGIN !== "true") return null;
 
-        const parsed = loginSchema.safeParse(credentials);
-        if (!parsed.success) return null;
+        const email =
+          typeof credentials?.email === "string"
+            ? credentials.email.trim().toLowerCase()
+            : "";
+        if (!email) return null;
 
-        const email = parsed.data.email;
-        let membership = await db.organizationMember.findFirst({
-          where: {
-            isActive: true,
-            isActivated: true,
-            user: { email },
-          },
-          include: { user: true },
-          orderBy: { joinedAt: "asc" },
-        });
-
-        if (!membership && email === ADMIN_EMAIL) {
-          const owner = await db.organizationMember.findFirst({
-            where: {
-              role: "OWNER",
-              isActive: true,
-              isActivated: true,
-            },
-            include: { user: true },
-            orderBy: { joinedAt: "asc" },
-          });
-
-          if (owner) {
-            const adminUser = await db.user.update({
-              where: { id: owner.userId },
-              data: { email: ADMIN_EMAIL },
-            });
-            membership = { ...owner, user: adminUser };
-          }
-        }
-
-        if (!membership) return null;
+        const rows = await db.$queryRaw<
+          Array<{
+            id: string;
+            email: string | null;
+            name: string;
+            avatarUrl: string | null;
+          }>
+        >`
+          SELECT
+            u."id"::text AS "id",
+            u."email" AS "email",
+            u."name" AS "name",
+            u."avatarUrl" AS "avatarUrl"
+          FROM public."users" u
+          WHERE LOWER(u."email") = ${email}
+            AND u."deletedAt" IS NULL
+            AND u."suspendedAt" IS NULL
+          ORDER BY u."createdAt" ASC
+          LIMIT 1
+        `;
+        const user = rows[0];
+        if (!user) return null;
 
         return {
-          id: membership.user.id,
-          email: membership.user.email,
-          name:
-            `${membership.user.firstName} ${membership.user.lastName}`.trim() ||
-            membership.user.email,
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.avatarUrl,
         };
       },
     }),
