@@ -12,7 +12,10 @@ function createPrismaClient(): PrismaClient {
     throw new Error("DATABASE_URL is not configured");
   }
 
-  const adapter = new PrismaPg({ connectionString });
+  const adapter = new PrismaPg(
+    { connectionString },
+    { schema: process.env.DATABASE_SCHEMA || "schedule" }
+  );
 
   return new PrismaClient({
     adapter,
