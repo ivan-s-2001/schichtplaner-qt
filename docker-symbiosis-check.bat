@@ -24,7 +24,7 @@ if errorlevel 1 goto :fail
 
 echo.
 echo Checking Outline HTTPS and proxy configuration...
-docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml exec -T outline node -e "if (!process.env.SECRET_KEY || !process.env.UTILS_SECRET) throw new Error('Outline secrets are missing'); if (!String(process.env.URL || '').startsWith('https://')) throw new Error('Outline URL is not HTTPS'); if (process.env.FORCE_HTTPS !== 'true') throw new Error('FORCE_HTTPS must be true'); if (process.env.PROXY_HEADERS_TRUSTED !== 'true') throw new Error('PROXY_HEADERS_TRUSTED must be true');"
+docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml exec -T outline node -e "if (!process.env.SECRET_KEY || !process.env.UTILS_SECRET) throw new Error('Outline secrets are missing'); if (!String(process.env.URL || '').startsWith('https://')) throw new Error('Outline URL is not HTTPS'); if (process.env.FORCE_HTTPS !== 'false') throw new Error('FORCE_HTTPS must be false behind Caddy'); if (process.env.PROXY_HEADERS_TRUSTED !== 'true') throw new Error('PROXY_HEADERS_TRUSTED must be true');"
 if errorlevel 1 goto :fail
 
 echo Checking Schedule authentication configuration...
