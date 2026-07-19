@@ -1,0 +1,412 @@
+:root,
+[data-qto-theme="light"] {
+  --qto-font-sans: -apple-system, BlinkMacSystemFont, Inter, "Segoe UI", Roboto, Oxygen, sans-serif;
+  --qto-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  --qto-background: var(--background, #ffffff);
+  --qto-background-secondary: var(--background-secondary, hsl(212 31% 95% / 1));
+  --qto-background-tertiary: var(--background-tertiary, #d7e0ea);
+  --qto-text: var(--foreground, #111319);
+  --qto-text-secondary: var(--text-secondary, #394351);
+  --qto-text-tertiary: var(--text-tertiary, #66778f);
+  --qto-placeholder: var(--placeholder, #a2b2c3);
+  --qto-accent: var(--primary, #0366d6);
+  --qto-accent-text: var(--primary-foreground, #ffffff);
+  --qto-divider: var(--divider, #dae1e9);
+  --qto-input-border: var(--input-border, #dae1e9);
+  --qto-input-border-focused: var(--input-border-focused, #66778f);
+  --qto-input-background: var(--input-background, hsl(212 31% 95% / 1));
+  --qto-neutral-background: var(--button-neutral-background, #ffffff);
+  --qto-neutral-hover: var(--button-neutral-hover-background, hsl(212 31% 95% / 1));
+  --qto-neutral-text: var(--button-neutral-text, #111319);
+  --qto-neutral-border: var(--button-neutral-border, hsl(212 31% 88% / 1));
+  --qto-danger: var(--destructive, #ed2651);
+  --qto-warning: var(--warning, #f08a24);
+  --qto-success: var(--success, #3ad984);
+  --qto-modal-backdrop: var(--modal-backdrop, rgba(0, 0, 0, 0.25));
+  --qto-modal-background: var(--modal-background, #ffffff);
+  --qto-menu-background: var(--menu-background, #ffffff);
+  --qto-modal-shadow: 0 4px 8px rgb(0 0 0 / 8%), 0 2px 4px rgb(0 0 0 / 0%), 0 30px 40px rgb(0 0 0 / 8%);
+  --qto-menu-shadow: 0 0 0 1px rgb(0 0 0 / 2%), 0 4px 8px rgb(0 0 0 / 8%), 0 2px 4px rgb(0 0 0 / 0%), 0 30px 40px rgb(0 0 0 / 8%);
+}
+
+.dark,
+[data-qto-theme="dark"],
+:root[data-outline-host-theme="dark"] {
+  --qto-background: var(--background, #111319);
+  --qto-background-secondary: var(--background-secondary, #1f232e);
+  --qto-background-tertiary: var(--background-tertiary, #2a2f3e);
+  --qto-text: var(--foreground, #e6e6e6);
+  --qto-text-secondary: var(--text-secondary, #8291a6);
+  --qto-text-tertiary: var(--text-tertiary, #66778f);
+  --qto-placeholder: var(--placeholder, hsl(215 17% 30% / 1));
+  --qto-accent: var(--primary, #137ffb);
+  --qto-accent-text: var(--primary-foreground, #ffffff);
+  --qto-divider: var(--divider, #262a37);
+  --qto-input-border: var(--input-border, #394351);
+  --qto-input-border-focused: var(--input-border-focused, #66778f);
+  --qto-input-background: var(--input-background, #262d36);
+  --qto-neutral-background: var(--button-neutral-background, #111319);
+  --qto-neutral-hover: var(--button-neutral-hover-background, #1a1e28);
+  --qto-neutral-text: var(--button-neutral-text, #ffffff);
+  --qto-neutral-border: var(--button-neutral-border, #394351);
+  --qto-modal-backdrop: var(--modal-backdrop, rgba(0, 0, 0, 0.5));
+  --qto-modal-background: var(--modal-background, #181c25);
+  --qto-menu-background: var(--menu-background, #181c25);
+  --qto-modal-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 8px 16px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.08);
+  --qto-menu-shadow: 0 0 0 1px rgb(34 40 52), 0 8px 16px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.qto-root {
+  color: var(--qto-text);
+  font-family: var(--qto-font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.qto-button {
+  display: inline-flex;
+  height: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 8px;
+  background: var(--qto-accent);
+  color: var(--qto-accent-text);
+  box-shadow: rgb(0 0 0 / 20%) 0 1px 2px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 32px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background 200ms ease-out;
+}
+
+.qto-button:hover:not(:disabled),
+.qto-button[aria-expanded="true"] {
+  filter: brightness(0.95);
+  transition: background 0s;
+}
+
+.qto-button:focus-visible {
+  outline: 2px solid var(--qto-input-border-focused);
+  outline-offset: 2px;
+}
+
+.qto-button:disabled {
+  cursor: default;
+  pointer-events: none;
+  opacity: 0.65;
+}
+
+.qto-button--neutral {
+  background: inherit;
+  color: var(--qto-neutral-text);
+  box-shadow: rgb(0 0 0 / 7%) 0 1px 2px, var(--qto-neutral-border) 0 0 0 1px inset;
+}
+
+.qto-button--neutral:hover:not(:disabled),
+.qto-button--neutral[aria-expanded="true"] {
+  background: var(--qto-neutral-hover);
+  filter: none;
+}
+
+.qto-button--ghost {
+  background: transparent;
+  color: var(--qto-text-secondary);
+  box-shadow: none;
+}
+
+.qto-button--ghost:hover:not(:disabled) {
+  background: var(--qto-background-secondary);
+  color: var(--qto-text);
+  filter: none;
+}
+
+.qto-button--danger {
+  background: var(--qto-danger);
+  color: #ffffff;
+}
+
+.qto-button--icon {
+  width: 32px;
+  padding: 0;
+}
+
+.qto-field {
+  display: flex;
+  min-width: 0;
+  min-height: 32px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--qto-input-border);
+  border-radius: 4px;
+  background: var(--qto-background);
+  color: var(--qto-text);
+}
+
+.qto-field:focus-within {
+  border-color: var(--qto-input-border-focused);
+}
+
+.qto-input,
+.qto-textarea,
+.qto-select {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--qto-text);
+  font: inherit;
+  font-size: 15px;
+}
+
+.qto-input,
+.qto-select {
+  height: 30px;
+  padding: 0 12px;
+}
+
+.qto-textarea {
+  min-height: 80px;
+  resize: vertical;
+  padding: 8px 12px;
+  line-height: 1.5;
+}
+
+.qto-input::placeholder,
+.qto-textarea::placeholder,
+.qto-select:invalid {
+  color: var(--qto-placeholder);
+  opacity: 1;
+}
+
+.qto-label {
+  display: inline-block;
+  padding-bottom: 4px;
+  color: var(--qto-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.qto-help {
+  margin-top: 4px;
+  color: var(--qto-text-tertiary);
+  font-size: 13px;
+}
+
+.qto-error {
+  margin-top: 4px;
+  color: var(--qto-danger);
+  font-size: 13px;
+}
+
+.qto-tabs {
+  display: flex;
+  gap: 24px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--qto-divider);
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.qto-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.qto-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  padding: 12px 0;
+  background: none;
+  color: var(--qto-text-tertiary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.qto-tab:hover,
+.qto-tab[aria-selected="true"],
+.qto-tab[aria-current="page"] {
+  color: var(--qto-text-secondary);
+}
+
+.qto-tab[aria-selected="true"]::after,
+.qto-tab[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--qto-text-secondary);
+}
+
+.qto-surface {
+  border: 1px solid var(--qto-divider);
+  border-radius: 8px;
+  background: var(--qto-background);
+  color: var(--qto-text);
+  box-shadow: none;
+}
+
+.qto-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--qto-divider);
+  border-bottom: 1px solid var(--qto-divider);
+  padding: 8px 0;
+}
+
+.qto-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.qto-page-title {
+  margin: 0;
+  color: var(--qto-text);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.qto-page-description {
+  margin: 4px 0 0;
+  max-width: 720px;
+  color: var(--qto-text-secondary);
+  font-size: 14px;
+}
+
+.qto-state {
+  display: flex;
+  min-height: 160px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 24px;
+  color: var(--qto-text-secondary);
+  text-align: center;
+}
+
+.qto-state-title {
+  color: var(--qto-text);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.qto-notice {
+  border-left: 4px solid var(--qto-accent);
+  border-radius: 4px;
+  padding: 8px 10px 8px 8px;
+  background: color-mix(in srgb, var(--qto-accent) 10%, transparent);
+  color: var(--qto-text);
+  font-size: 14px;
+}
+
+.qto-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--qto-modal-backdrop);
+}
+
+.qto-dialog-positioner {
+  position: fixed;
+  inset: 0;
+  z-index: 51;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  outline: none;
+}
+
+.qto-dialog {
+  width: min(450px, calc(100vw - 32px));
+  max-height: 70vh;
+  margin-top: 25vh;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--qto-modal-background);
+  color: var(--qto-text);
+  box-shadow: var(--qto-modal-shadow);
+}
+
+.qto-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 24px 24px 12px;
+}
+
+.qto-dialog-title {
+  margin: 0;
+  color: var(--qto-text-secondary);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.qto-dialog-content {
+  max-height: 65vh;
+  overflow: auto;
+  padding: 8px 24px 24px;
+}
+
+.qto-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--qto-divider);
+  padding-top: 16px;
+}
+
+.qto-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--qto-divider);
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: var(--qto-background-secondary);
+  color: var(--qto-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .qto-page-header {
+    flex-direction: column;
+  }
+
+  .qto-page-title {
+    font-size: 24px;
+  }
+
+  .qto-dialog {
+    width: 100vw;
+    max-height: 100vh;
+    margin-top: 0;
+    border-radius: 0;
+  }
+}
