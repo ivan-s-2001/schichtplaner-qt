@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MobileNav } from "./mobile-nav";
+import { DivisionSwitcher } from "./division-switcher";
 import { ThemeToggle } from "./theme-toggle";
 
 export const navItems = [
@@ -66,7 +67,10 @@ export function TopNav() {
           })}
         </nav>
 
-        <ThemeToggle />
+        <div className="ml-auto flex items-center gap-1.5">
+          <DivisionSwitcher />
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );
