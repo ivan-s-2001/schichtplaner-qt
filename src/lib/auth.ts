@@ -7,7 +7,11 @@ import {
 } from "@/lib/outline-integration";
 import { consumeOutlineSsoToken } from "@/lib/outline-sso-token";
 
+const authSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: authSecret,
+  trustHost: true,
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
   pages: { signIn: "/" },
   providers: [
