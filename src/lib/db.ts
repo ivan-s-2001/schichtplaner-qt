@@ -12,7 +12,20 @@ function createPrismaClient(): PrismaClient {
     throw new Error("DATABASE_URL is not configured");
   }
 
-  const adapter = new PrismaPg({ connectionString });
+  const parsedUrl = new URL(connectionString);
+  const schema =
+    process.env.SCHEDULE_DB_SCHEMA?.trim() ||
+    parsedUrl.searchParams.get("schema")?.trim() ||
+    undefined;
+
+  // `schema` is a Prisma URL extension, not a native node-postgres option.
+  // Remove it from the pg connection string and pass it to PrismaPg explicitly.
+  parsedUrl.searchParams.delete("schema");
+
+  const connection = { connectionString: parsedUrl.toString() };
+  const adapter = schema
+    ? new PrismaPg(connection, { schema })
+    : new PrismaPg(connection);
 
   return new PrismaClient({
     adapter,

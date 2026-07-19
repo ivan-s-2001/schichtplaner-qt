@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentMember } from "@/lib/auth-helpers";
+import { getSelectedDivision } from "@/lib/selected-division";
 import { serializeShiftTemplate } from "@/lib/schedule/shift-pool";
 
 type DayNoteRow = {
@@ -39,6 +40,10 @@ type ShiftSnapshotRow = {
   poolDescription: string | null;
 };
 
+type DivisionUserRow = {
+  userId: string;
+};
+
 function getWeekRange(year: number, weekNumber: number) {
   const januaryFourth = new Date(Date.UTC(year, 0, 4));
   const januaryFourthDay = januaryFourth.getUTCDay() || 7;
@@ -61,6 +66,25 @@ export async function GET(request: NextRequest) {
   if (!member) {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   }
+
+  const selectedDivision = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+  if (!selectedDivision) {
+    return NextResponse.json(
+      { error: "Пользователь не состоит ни в одной группе Outline" },
+      { status: 403 }
+    );
+  }
+
+  const divisionUsers = await db.$queryRaw<DivisionUserRow[]>`
+    SELECT "userId"
+    FROM "division_members"
+    WHERE "divisionId" = ${selectedDivision.id}
+  `;
+  const divisionUserIds = divisionUsers.map((item) => item.userId);
 
   const { searchParams } = request.nextUrl;
   const kwParam = searchParams.get("kw");
@@ -93,7 +117,10 @@ export async function GET(request: NextRequest) {
   const orgId = member.organizationId;
   const include = {
     shifts: {
-      where: { deletedAt: null },
+      where: {
+        deletedAt: null,
+        divisionId: selectedDivision.id,
+      },
       include: {
         division: {
           select: {
@@ -159,6 +186,11 @@ export async function GET(request: NextRequest) {
           "id", "scheduleId", "userId", "dayOfWeek", "createdAt", "updatedAt"
         FROM "schedule_day_offs"
         WHERE "scheduleId" = ${schedule.id}
+          AND "userId" IN (
+            SELECT "userId"
+            FROM "division_members"
+            WHERE "divisionId" = ${selectedDivision.id}
+          )
         ORDER BY "dayOfWeek" ASC, "createdAt" ASC
       `,
       db.absence.findMany({
@@ -166,6 +198,7 @@ export async function GET(request: NextRequest) {
           status: "APPROVED",
           dateFrom: { lte: weekEnd },
           dateTo: { gte: weekStart },
+          userId: { in: divisionUserIds },
           user: {
             memberships: {
               some: {
@@ -196,6 +229,7 @@ export async function GET(request: NextRequest) {
         FROM "bookings" b
         INNER JOIN "shifts" s ON s."id" = b."shiftId"
         WHERE s."scheduleId" = ${schedule.id}
+          AND s."divisionId" = ${selectedDivision.id}
           AND s."deletedAt" IS NULL
       `,
       db.$queryRaw<ShiftSnapshotRow[]>`
@@ -208,6 +242,7 @@ export async function GET(request: NextRequest) {
           "poolDescription"
         FROM "shifts"
         WHERE "scheduleId" = ${schedule.id}
+          AND "divisionId" = ${selectedDivision.id}
           AND "deletedAt" IS NULL
       `,
     ]);
@@ -263,6 +298,7 @@ export async function GET(request: NextRequest) {
   });
 
   return NextResponse.json({
+    division: selectedDivision,
     schedule: {
       id: schedule.id,
       organizationId: schedule.organizationId,

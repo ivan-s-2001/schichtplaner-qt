@@ -1,0 +1,2 @@
+CREATE SCHEMA IF NOT EXISTS schedule AUTHORIZATION outline;
+GRANT ALL ON SCHEMA schedule TO outline;

@@ -3,6 +3,10 @@ import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { db } from "@/lib/db";
 import { z } from "zod";
+import {
+  syncOutlineUser,
+  verifyOutlineToken,
+} from "@/lib/outline-integration";
 
 const ADMIN_EMAIL = "admin@qksr.ru";
 
@@ -18,11 +22,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   providers: [
     Credentials({
-      name: "Email access",
+      name: "Outline SSO",
       credentials: {
+        token: { label: "Outline token", type: "text" },
         email: { label: "Email", type: "email" },
       },
       async authorize(credentials) {
+        const token =
+          typeof credentials?.token === "string"
+            ? credentials.token.trim()
+            : "";
+
+        if (token) {
+          try {
+            const payload = verifyOutlineToken(token);
+            const membership = await syncOutlineUser(payload);
+
+            return {
+              id: membership.user.id,
+              email: membership.user.email,
+              name:
+                `${membership.user.firstName} ${membership.user.lastName}`.trim() ||
+                membership.user.email,
+            };
+          } catch (error) {
+            console.error("Outline SSO failed", error);
+            return null;
+          }
+        }
+
+        // Local email access is retained only as an explicit development fallback.
+        if (process.env.ALLOW_EMAIL_LOGIN !== "true") return null;
+
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
 

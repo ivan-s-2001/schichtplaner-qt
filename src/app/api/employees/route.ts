@@ -2,18 +2,49 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
+import { getSelectedDivision } from "@/lib/selected-division";
 
 type PatronymicRow = {
   id: string;
   patronymic: string | null;
 };
 
-// GET /api/employees - List all org members
+type DivisionUserRow = {
+  userId: string;
+};
+
+// GET /api/employees - List members of the selected Outline group / division.
 export async function GET(request: NextRequest) {
   const member = await getCurrentMember();
   if (!member) {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   }
+
+  const selectedDivision = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+
+  if (!selectedDivision) {
+    return NextResponse.json({
+      members: [],
+      counts: {
+        all: 0,
+        admin: 0,
+        manager: 0,
+        not_activated: 0,
+        inactive: 0,
+      },
+    });
+  }
+
+  const divisionUsers = await db.$queryRaw<DivisionUserRow[]>`
+    SELECT "userId"
+    FROM "division_members"
+    WHERE "divisionId" = ${selectedDivision.id}
+  `;
+  const divisionUserIds = divisionUsers.map((item) => item.userId);
 
   const { searchParams } = request.nextUrl;
   const search = searchParams.get("search") || "";
@@ -22,6 +53,7 @@ export async function GET(request: NextRequest) {
 
   const where: Record<string, unknown> = {
     organizationId: member.organizationId,
+    userId: { in: divisionUserIds },
   };
 
   if (status === "inactive") {
@@ -42,6 +74,11 @@ export async function GET(request: NextRequest) {
         SELECT "id"
         FROM "users"
         WHERE "patronymic" ILIKE ${`%${search}%`}
+          AND "id" IN (
+            SELECT "userId"
+            FROM "division_members"
+            WHERE "divisionId" = ${selectedDivision.id}
+          )
       `
     : [];
   const patronymicMatchIds = patronymicMatches.map((item) => item.id);
@@ -84,7 +121,9 @@ export async function GET(request: NextRequest) {
     SELECT u."id", u."patronymic"
     FROM "users" u
     INNER JOIN "organization_members" om ON om."userId" = u."id"
+    INNER JOIN "division_members" dm ON dm."userId" = u."id"
     WHERE om."organizationId" = ${member.organizationId}
+      AND dm."divisionId" = ${selectedDivision.id}
   `;
   const patronymicByUser = new Map(
     patronymics.map((item) => [item.id, item.patronymic])
@@ -99,7 +138,10 @@ export async function GET(request: NextRequest) {
   }));
 
   const allMembers = await db.organizationMember.findMany({
-    where: { organizationId: member.organizationId },
+    where: {
+      organizationId: member.organizationId,
+      userId: { in: divisionUserIds },
+    },
     select: { role: true, isActive: true, isActivated: true },
   });
 
@@ -117,7 +159,11 @@ export async function GET(request: NextRequest) {
     inactive: allMembers.filter((item) => !item.isActive).length,
   };
 
-  return NextResponse.json({ members: membersWithPatronymic, counts });
+  return NextResponse.json({
+    members: membersWithPatronymic,
+    counts,
+    division: selectedDivision,
+  });
 }
 
 // POST /api/employees - Create new employee(s)
@@ -154,6 +200,18 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Ошибка проверки данных", details: parsed.error.issues },
+      { status: 400 }
+    );
+  }
+
+  const selectedDivision = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+  if (!selectedDivision) {
+    return NextResponse.json(
+      { error: "Сначала выберите отдел Outline" },
       { status: 400 }
     );
   }
@@ -249,6 +307,20 @@ export async function POST(request: NextRequest) {
               profileImage: true,
             },
           },
+        },
+      });
+
+      await tx.divisionMember.upsert({
+        where: {
+          divisionId_userId: {
+            divisionId: selectedDivision.id,
+            userId: user.id,
+          },
+        },
+        update: {},
+        create: {
+          divisionId: selectedDivision.id,
+          userId: user.id,
         },
       });
 
