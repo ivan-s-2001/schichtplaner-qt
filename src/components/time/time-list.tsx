@@ -1,46 +1,31 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   ChevronUp,
-  Search,
-  Plus,
   Clock,
-  Timer,
   Pencil,
+  Plus,
+  Search,
+  Timer,
   Trash2,
-  Loader2,
 } from "lucide-react";
-import {
-  format,
-  startOfMonth,
-  endOfMonth,
-  eachDayOfInterval,
-  getDay,
-  isToday,
-  addMonths,
-  subMonths,
-  getISOWeek,
-} from "date-fns";
+import { addMonths, format, subMonths } from "date-fns";
 import { ru } from "date-fns/locale";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrentMember } from "@/lib/hooks/use-current-member";
 import { TimeRecordForm } from "./time-record-form";
 import { Stopwatch } from "./stopwatch";
-import { AnomalyBadge, EmployeeAnomalyIndicator } from "./anomaly-badge";
-
-// ---------- Types ----------
 
 type TimeRecord = {
   id: string;
@@ -69,51 +54,24 @@ type TimeResponse = {
   employees: EmployeeGroup[];
 };
 
-// ---------- Helpers ----------
-
-const DAY_NAMES_SHORT = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
-
-function getInitials(firstName: string, lastName: string) {
+function initials(firstName: string, lastName: string) {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
 
-function formatHours(hours: number): string {
-  const h = Math.floor(hours);
-  const m = Math.round((hours - h) * 60);
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
+function formatHours(hours: number) {
+  const whole = Math.floor(hours);
+  const minutes = Math.round((hours - whole) * 60);
+  return minutes > 0 ? `${whole} ч ${minutes} мин` : `${whole} ч`;
 }
 
-function getRecordDisplayTime(record: TimeRecord): string {
-  if (
-    (record.type === "MANUAL" || record.type === "WATCH") &&
-    record.timeFrom
-  ) {
-    if (record.timeTo) {
-      return `${record.timeFrom} - ${record.timeTo}`;
-    }
-    return `${record.timeFrom} - ...`;
-  }
+function recordTime(record: TimeRecord) {
   if (record.type === "MANUAL_DURATION") {
-    const h = record.durationHours ?? 0;
-    const m = record.durationMinutes ?? 0;
-    return `${h}h ${m}m`;
+    return `${record.durationHours ?? 0} ч ${record.durationMinutes ?? 0} мин`;
   }
-  return "-";
+  if (record.timeFrom && record.timeTo) return `${record.timeFrom}–${record.timeTo}`;
+  if (record.timeFrom) return `${record.timeFrom}–…`;
+  return "—";
 }
-
-function getRecordTypeIcon(type: TimeRecord["type"]) {
-  switch (type) {
-    case "MANUAL":
-      return <Clock className="size-3.5 text-blue-500" />;
-    case "WATCH":
-      return <Timer className="size-3.5 text-emerald-500" />;
-    case "MANUAL_DURATION":
-      return <Clock className="size-3.5 text-violet-500" />;
-  }
-}
-
-// ---------- Component ----------
 
 export function TimeList() {
   const queryClient = useQueryClient();
@@ -123,7 +81,6 @@ export function TimeList() {
     currentMember?.role === "ADMIN" ||
     currentMember?.role === "MANAGER";
 
-  // State
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [search, setSearch] = useState("");
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
@@ -132,172 +89,86 @@ export function TimeList() {
   const [showStopwatch, setShowStopwatch] = useState(false);
 
   const monthKey = format(currentMonth, "yyyy-MM");
-
-  // Fetch time records
   const { data, isLoading, error } = useQuery<TimeResponse>({
     queryKey: ["time-records", monthKey],
     queryFn: async () => {
-      const res = await fetch(`/api/time?month=${monthKey}`);
-      if (!res.ok) throw new Error("Ошибка загрузки учёта времени");
-      return res.json();
+      const response = await fetch(`/api/time?month=${monthKey}`);
+      if (!response.ok) throw new Error("Не удалось загрузить учёт времени");
+      return response.json();
     },
   });
 
   const employees = data?.employees ?? [];
-
-  // Fetch anomaly data for the month (managers only)
-  const { data: anomalyData } = useQuery<{
-    anomalies: {
-      type: "long_shift" | "gap" | "overlap" | "deviation";
-      severity: "warning" | "critical";
-      employeeId: string;
-      employeeName: string;
-      date: string;
-      details: string;
-      value: number;
-    }[];
-    summary: { total: number; critical: number; warning: number };
-  }>({
-    queryKey: ["anomalies", monthKey],
-    queryFn: async () => {
-      const res = await fetch(`/api/ai/anomalies?month=${monthKey}`);
-      if (!res.ok) return { anomalies: [], summary: { total: 0, critical: 0, warning: 0 } };
-      return res.json();
-    },
-    enabled: isManager,
-  });
-  const anomalies = anomalyData?.anomalies ?? [];
-
-  // Filter by search
   const filteredEmployees = useMemo(() => {
-    if (!search) return employees;
-    const q = search.toLowerCase();
-    return employees.filter(
-      (emp) =>
-        emp.firstName.toLowerCase().includes(q) ||
-        emp.lastName.toLowerCase().includes(q)
+    const query = search.trim().toLowerCase();
+    if (!query) return employees;
+    return employees.filter((employee) =>
+      `${employee.lastName} ${employee.firstName}`.toLowerCase().includes(query)
     );
   }, [employees, search]);
 
-  // Employee options for the form
   const employeeOptions = useMemo(
     () =>
-      employees.map((emp) => ({
-        userId: emp.userId,
-        firstName: emp.firstName,
-        lastName: emp.lastName,
+      employees.map((employee) => ({
+        userId: employee.userId,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
       })),
     [employees]
   );
 
-  // All days in the month
-  const daysInMonth = useMemo(() => {
-    const start = startOfMonth(currentMonth);
-    const end = endOfMonth(currentMonth);
-    return eachDayOfInterval({ start, end });
-  }, [currentMonth]);
-
-  // Group days by ISO week
-  const weekGroups = useMemo(() => {
-    const groups: { weekNumber: number; days: Date[] }[] = [];
-    let currentWeek: { weekNumber: number; days: Date[] } | null = null;
-
-    for (const day of daysInMonth) {
-      const wn = getISOWeek(day);
-      if (!currentWeek || currentWeek.weekNumber !== wn) {
-        currentWeek = { weekNumber: wn, days: [] };
-        groups.push(currentWeek);
-      }
-      currentWeek.days.push(day);
-    }
-
-    return groups;
-  }, [daysInMonth]);
-
-  // Navigation
-  const navigatePrev = useCallback(() => {
-    setCurrentMonth((prev) => subMonths(prev, 1));
-  }, []);
-
-  const navigateNext = useCallback(() => {
-    setCurrentMonth((prev) => addMonths(prev, 1));
-  }, []);
-
-  const navigateToday = useCallback(() => {
-    setCurrentMonth(new Date());
-  }, []);
-
-  // Toggle expand
-  const toggleExpand = useCallback((userId: string) => {
-    setExpandedUsers((prev) => {
-      const next = new Set(prev);
-      if (next.has(userId)) {
-        next.delete(userId);
-      } else {
-        next.add(userId);
-      }
-      return next;
-    });
-  }, []);
-
-  // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/time/${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error || "Ошибка удаления");
+      const response = await fetch(`/api/time/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(result?.error || "Не удалось удалить запись");
       }
-      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Запись удалена");
-      queryClient.invalidateQueries({ queryKey: ["time-records"] });
+      await queryClient.invalidateQueries({ queryKey: ["time-records"] });
     },
-    onError: (err: Error) => {
-      toast.error(err.message);
-    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
-  function handleDelete(id: string) {
-    if (confirm("Удалить запись рабочего времени?")) {
-      deleteMutation.mutate(id);
-    }
+  function toggleUser(userId: string) {
+    setExpandedUsers((current) => {
+      const next = new Set(current);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
   }
 
-  function handleEdit(record: TimeRecord) {
+  function editRecord(record: TimeRecord) {
     setEditingRecord(record);
     setShowRecordForm(true);
   }
 
-  // Get records for a specific user and date
-  function getRecordsForDate(records: TimeRecord[], day: Date): TimeRecord[] {
-    const dateStr = format(day, "yyyy-MM-dd");
-    return records.filter((r) => r.date.slice(0, 10) === dateStr);
+  function removeRecord(record: TimeRecord) {
+    if (window.confirm("Удалить запись рабочего времени?")) {
+      deleteMutation.mutate(record.id);
+    }
   }
-
-  const monthLabel = format(currentMonth, "MMMM yyyy", { locale: ru });
-  const isCurrentMonth =
-    format(currentMonth, "yyyy-MM") === format(new Date(), "yyyy-MM");
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Учёт времени</h1>
           <p className="text-sm text-muted-foreground">
-            Учитывайте рабочее время сотрудников
+            Рабочее время сотрудников выбранного отдела
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowStopwatch(!showStopwatch)}
+            onClick={() => setShowStopwatch((value) => !value)}
           >
             <Timer className="size-4" />
-            <span className="hidden sm:inline">Секундомер</span>
+            Секундомер
           </Button>
           <Button
             size="sm"
@@ -307,330 +178,146 @@ export function TimeList() {
             }}
           >
             <Plus className="size-4" />
-            Erfassen
+            Добавить
           </Button>
         </div>
       </div>
 
-      {/* Stopwatch widget */}
       {showStopwatch && (
         <div className="max-w-sm">
           <Stopwatch />
         </div>
       )}
 
-      {/* Month navigation */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon-sm" onClick={navigatePrev}>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={() => setCurrentMonth((date) => subMonths(date, 1))}
+          >
             <ChevronLeft className="size-4" />
           </Button>
-          <span className="text-lg font-semibold capitalize min-w-[160px] text-center">
-            {monthLabel}
+          <span className="min-w-40 text-center text-lg font-semibold capitalize">
+            {format(currentMonth, "LLLL yyyy", { locale: ru })}
           </span>
-          <Button variant="outline" size="icon-sm" onClick={navigateNext}>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={() => setCurrentMonth((date) => addMonths(date, 1))}
+          >
             <ChevronRight className="size-4" />
           </Button>
         </div>
-        {!isCurrentMonth && (
-          <Button variant="ghost" size="sm" onClick={navigateToday}>
-            Heute
-          </Button>
+
+        {isManager && (
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Найти сотрудника"
+              className="pl-9"
+            />
+          </div>
         )}
       </div>
 
-      {/* Anomaly Badge */}
-      {isManager && (
-        <AnomalyBadge month={monthKey} isManager={isManager} />
-      )}
-
-      {/* Search */}
-      {isManager && (
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Найти сотрудника..."
-            className="pl-9"
-          />
-        </div>
-      )}
-
-      {/* Loading */}
       {isLoading && <TimeListSkeleton />}
-
-      {/* Error */}
       {error && (
         <Card className="p-6 text-center text-destructive">
-          Не удалось загрузить данные. Повторите попытку.
+          Не удалось загрузить данные.
         </Card>
       )}
-
-      {/* Empty state */}
       {!isLoading && !error && filteredEmployees.length === 0 && (
-        <Card className="flex flex-col items-center justify-center p-12 text-center">
-          <Clock className="size-12 text-muted-foreground/50 mb-3" />
-          <p className="text-lg font-medium">Записей рабочего времени нет</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {search
-              ? "По вашему запросу ничего не найдено."
-              : "За этот месяц записей пока нет."}
-          </p>
+        <Card className="p-10 text-center text-muted-foreground">
+          Записей за выбранный месяц нет.
         </Card>
       )}
 
-      {/* Employee list (accordion) */}
       {!isLoading &&
         !error &&
-        filteredEmployees.map((emp) => {
-          const isExpanded = expandedUsers.has(emp.userId);
+        filteredEmployees.map((employee) => {
+          const expanded = expandedUsers.has(employee.userId);
           return (
-            <Card key={emp.userId} className="overflow-hidden">
-              {/* Employee header */}
+            <Card key={employee.userId} className="overflow-hidden">
               <button
                 type="button"
-                onClick={() => toggleExpand(emp.userId)}
-                className="flex w-full items-center gap-3 p-4 text-left hover:bg-muted/50 transition-colors"
+                className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-muted/50"
+                onClick={() => toggleUser(employee.userId)}
               >
                 <Avatar>
                   <AvatarFallback>
-                    {getInitials(emp.firstName, emp.lastName)}
+                    {initials(employee.firstName, employee.lastName)}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium truncate">
-                    {emp.lastName}, {emp.firstName}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium">
+                    {employee.lastName} {employee.firstName}
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    {emp.records.length} Erfassung
-                    {emp.records.length !== 1 ? "en" : ""}
+                    {employee.records.length} записей
                   </div>
                 </div>
-                {isManager && anomalies.length > 0 && (
-                  <EmployeeAnomalyIndicator
-                    anomalies={anomalies}
-                    employeeId={emp.userId}
-                  />
-                )}
-                <Badge
-                  variant="secondary"
-                  className="tabular-nums font-mono text-sm"
-                >
-                  {formatHours(emp.totalHours)}
-                </Badge>
-                {isExpanded ? (
-                  <ChevronUp className="size-5 text-muted-foreground shrink-0" />
+                <Badge variant="secondary">{formatHours(employee.totalHours)}</Badge>
+                {expanded ? (
+                  <ChevronUp className="size-5 text-muted-foreground" />
                 ) : (
-                  <ChevronDown className="size-5 text-muted-foreground shrink-0" />
+                  <ChevronDown className="size-5 text-muted-foreground" />
                 )}
               </button>
 
-              {/* Expanded: calendar-like day list */}
-              {isExpanded && (
-                <div className="border-t">
-                  {/* Desktop: grouped by weeks */}
-                  <div className="hidden md:block">
-                    {weekGroups.map((week) => (
-                      <div key={week.weekNumber} className="border-b last:border-b-0">
-                        <div className="bg-muted/30 px-4 py-1.5 text-xs font-medium text-muted-foreground">
-                          KW {week.weekNumber}
+              {expanded && (
+                <div className="divide-y border-t">
+                  {employee.records.length === 0 ? (
+                    <div className="p-5 text-center text-sm text-muted-foreground">
+                      Записей нет
+                    </div>
+                  ) : (
+                    employee.records.map((record) => (
+                      <div
+                        key={record.id}
+                        className="flex flex-wrap items-center gap-3 px-4 py-3"
+                      >
+                        <Clock className="size-4 text-muted-foreground" />
+                        <div className="min-w-28 text-sm font-medium">
+                          {format(new Date(record.date), "dd.MM.yyyy")}
                         </div>
-                        {week.days.map((day) => {
-                          const dayRecords = getRecordsForDate(
-                            emp.records,
-                            day
-                          );
-                          const dayOfWeek = getDay(day); // 0=Sun
-                          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-                          const today = isToday(day);
-
-                          return (
-                            <div
-                              key={day.toISOString()}
-                              className={cn(
-                                "flex items-start gap-3 px-4 py-2 border-b last:border-b-0",
-                                isWeekend && "bg-muted/20",
-                                today && "bg-primary/5"
-                              )}
-                            >
-                              {/* Date column */}
-                              <div className="w-24 shrink-0 flex items-center gap-2">
-                                <span
-                                  className={cn(
-                                    "text-xs font-medium w-5",
-                                    isWeekend
-                                      ? "text-muted-foreground"
-                                      : "text-foreground"
-                                  )}
-                                >
-                                  {DAY_NAMES_SHORT[dayOfWeek]}
-                                </span>
-                                <span
-                                  className={cn(
-                                    "text-sm tabular-nums",
-                                    today
-                                      ? "font-bold text-primary"
-                                      : "text-muted-foreground"
-                                  )}
-                                >
-                                  {format(day, "dd.MM.")}
-                                </span>
-                              </div>
-
-                              {/* Records column */}
-                              <div className="flex-1 min-w-0">
-                                {dayRecords.length === 0 ? (
-                                  <span className="text-xs text-muted-foreground/50">
-                                    -
-                                  </span>
-                                ) : (
-                                  <div className="space-y-1">
-                                    {dayRecords.map((record) => (
-                                      <div
-                                        key={record.id}
-                                        className="flex items-center gap-2 group"
-                                      >
-                                        {getRecordTypeIcon(record.type)}
-                                        <span className="text-sm font-mono tabular-nums">
-                                          {getRecordDisplayTime(record)}
-                                        </span>
-                                        {record.category && (
-                                          <Badge
-                                            variant="outline"
-                                            className="text-[10px] px-1.5 py-0"
-                                          >
-                                            {record.category.name}
-                                          </Badge>
-                                        )}
-                                        {record.comment && (
-                                          <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                                            {record.comment}
-                                          </span>
-                                        )}
-                                        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <Button
-                                            variant="ghost"
-                                            size="icon-xs"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleEdit(record);
-                                            }}
-                                          >
-                                            <Pencil className="size-3" />
-                                          </Button>
-                                          <Button
-                                            variant="ghost"
-                                            size="icon-xs"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleDelete(record.id);
-                                            }}
-                                            disabled={deleteMutation.isPending}
-                                          >
-                                            <Trash2 className="size-3 text-destructive" />
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Mobile: simplified list */}
-                  <div className="md:hidden">
-                    {daysInMonth.map((day) => {
-                      const dayRecords = getRecordsForDate(emp.records, day);
-                      if (dayRecords.length === 0) return null;
-                      const dayOfWeek = getDay(day);
-                      const today = isToday(day);
-
-                      return (
-                        <div
-                          key={day.toISOString()}
-                          className={cn(
-                            "px-4 py-3 border-b last:border-b-0",
-                            today && "bg-primary/5"
-                          )}
-                        >
-                          <div className="flex items-center gap-2 mb-1.5">
-                            <span className="text-xs font-medium">
-                              {DAY_NAMES_SHORT[dayOfWeek]}
-                            </span>
-                            <span
-                              className={cn(
-                                "text-sm tabular-nums",
-                                today
-                                  ? "font-bold text-primary"
-                                  : "text-muted-foreground"
-                              )}
-                            >
-                              {format(day, "dd.MM.")}
-                            </span>
-                          </div>
-                          <div className="space-y-2">
-                            {dayRecords.map((record) => (
-                              <div
-                                key={record.id}
-                                className="flex items-center justify-between gap-2"
-                              >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  {getRecordTypeIcon(record.type)}
-                                  <span className="text-sm font-mono tabular-nums">
-                                    {getRecordDisplayTime(record)}
-                                  </span>
-                                  {record.category && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] px-1.5 py-0"
-                                    >
-                                      {record.category.name}
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon-xs"
-                                    onClick={() => handleEdit(record)}
-                                  >
-                                    <Pencil className="size-3" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon-xs"
-                                    onClick={() => handleDelete(record.id)}
-                                    disabled={deleteMutation.isPending}
-                                  >
-                                    <Trash2 className="size-3 text-destructive" />
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                        <div className="font-mono text-sm">{recordTime(record)}</div>
+                        {record.category && (
+                          <Badge variant="outline">{record.category.name}</Badge>
+                        )}
+                        {record.comment && (
+                          <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                            {record.comment}
+                          </span>
+                        )}
+                        <div className="ml-auto flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            onClick={() => editRecord(record)}
+                          >
+                            <Pencil className="size-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            disabled={deleteMutation.isPending}
+                            onClick={() => removeRecord(record)}
+                          >
+                            <Trash2 className="size-3.5 text-destructive" />
+                          </Button>
                         </div>
-                      );
-                    })}
-                    {/* If no records at all on mobile */}
-                    {emp.records.length === 0 && (
-                      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                        Keine Erfassungen in diesem Monat
                       </div>
-                    )}
-                  </div>
+                    ))
+                  )}
                 </div>
               )}
             </Card>
           );
         })}
 
-      {/* Record form dialog */}
       <TimeRecordForm
         open={showRecordForm}
         onOpenChange={(open) => {
@@ -647,8 +334,8 @@ export function TimeList() {
 function TimeListSkeleton() {
   return (
     <div className="space-y-3">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <Card key={i} className="p-4">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <Card key={index} className="p-4">
           <div className="flex items-center gap-3">
             <Skeleton className="size-10 rounded-full" />
             <div className="flex-1 space-y-2">
