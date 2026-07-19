@@ -12,7 +12,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/outline
       DATABASE_SCHEMA: schedule
@@ -51,6 +51,9 @@ jobs:
           cat tsc.log
           exit 1
       - run: npm run build
+
+      - name: Build Schedule Docker image without external build arguments
+        run: docker build --target builder -t schedule-ci .
 
   schema-contract:
     runs-on: ubuntu-latest
