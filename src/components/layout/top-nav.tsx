@@ -2,15 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
 import {
   CalendarIcon,
   ClockIcon,
   TeamIcon,
-  CommentIcon,
   GraphIcon,
   SettingsIcon,
-  SparklesIcon,
 } from "@/components/icons/outline-icons";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "./user-menu";
@@ -23,7 +20,6 @@ const navItems = [
   { key: "schedule", icon: CalendarIcon, href: "/schedule/employee", label: "График" },
   { key: "time", icon: ClockIcon, href: "/time", label: "Учёт времени" },
   { key: "employees", icon: TeamIcon, href: "/employees", label: "Сотрудники" },
-  { key: "portal", icon: CommentIcon, href: "/portal/inbox", label: "Портал" },
   { key: "reporting", icon: GraphIcon, href: "/reporting", label: "Отчёты" },
   { key: "settings", icon: SettingsIcon, href: "/settings", label: "Настройки" },
 ] as const;
@@ -32,14 +28,6 @@ export { navItems };
 
 export function TopNav() {
   const pathname = usePathname();
-
-  const { data: unreadData } = useQuery<{ count: number }>({
-    queryKey: ["messages", "unread-count"],
-    queryFn: () => fetch("/api/messages/unread-count").then((r) => r.json()),
-    refetchInterval: 30000,
-  });
-
-  const unreadCount = unreadData?.count ?? 0;
 
   function isActive(href: string) {
     const segment = "/" + href.split("/")[1];
@@ -75,11 +63,6 @@ export function TopNav() {
               <Link key={item.key} href={item.href} className={itemClass(active)}>
                 <Icon className="size-4" />
                 <span className="hidden lg:inline">{item.label}</span>
-                {item.key === "portal" && unreadCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-white">
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </span>
-                )}
               </Link>
             );
           })}
@@ -87,12 +70,6 @@ export function TopNav() {
 
         <div className="ml-auto flex items-center gap-1">
           <DivisionSwitcher />
-
-          <Link href="/ai/chat" className={itemClass(pathname.startsWith("/ai"))}>
-            <SparklesIcon className="size-4" />
-            <span className="hidden lg:inline">ИИ</span>
-          </Link>
-
           <ConnectionStatus />
           <ThemeToggle />
           <UserMenu />
