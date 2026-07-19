@@ -5,40 +5,41 @@ export type OutlineDivision = {
   title: string;
   description: string | null;
   color: string;
-  outlineGroupId: string;
+  outlineGroupId: null;
+  scheduleMode: "SHIFT" | "STABLE";
+  managerUserId: string | null;
+  isManager: boolean;
+  isPrimary: boolean;
 };
 
 /**
- * Reads departments directly from Outline. The scheduling department ID is the
- * same UUID as public.groups.id; there is no copied division table.
+ * Scheduling divisions are managed independently in Outline settings.
+ * Outline groups remain document-access groups and do not affect scheduling.
+ * Every active workspace user may view every division; the single assignment
+ * in schedule.division_members only controls the initial/default division.
  */
 export async function getOutlineDivisions(
   outlineUserId: string,
   outlineTeamId: string
 ): Promise<OutlineDivision[]> {
   return db.$queryRaw<OutlineDivision[]>`
-    SELECT DISTINCT
-      g."id"::text AS "id",
-      g."name" AS "title",
-      g."description" AS "description",
-      '#6366f1'::text AS "color",
-      g."id"::text AS "outlineGroupId"
-    FROM public."users" u
-    INNER JOIN public."groups" g
-      ON g."teamId" = u."teamId"
-    LEFT JOIN public."group_users" gu
-      ON gu."groupId" = g."id"
-      AND gu."userId" = u."id"
-    WHERE u."id" = CAST(${outlineUserId} AS uuid)
-      AND u."teamId" = CAST(${outlineTeamId} AS uuid)
-      AND u."deletedAt" IS NULL
-      AND u."suspendedAt" IS NULL
-      AND g."deletedAt" IS NULL
-      AND (
-        u."role"::text = 'admin'
-        OR gu."userId" IS NOT NULL
-      )
-    ORDER BY g."name" ASC
+    SELECT
+      d."id"::text AS "id",
+      d."title" AS "title",
+      d."description" AS "description",
+      d."color" AS "color",
+      NULL::text AS "outlineGroupId",
+      d."scheduleMode"::text AS "scheduleMode",
+      d."managerUserId"::text AS "managerUserId",
+      (d."managerUserId" = CAST(${outlineUserId} AS uuid)) AS "isManager",
+      (dm."userId" IS NOT NULL) AS "isPrimary"
+    FROM schedule."divisions" d
+    LEFT JOIN schedule."division_members" dm
+      ON dm."divisionId" = d."id"
+      AND dm."userId" = CAST(${outlineUserId} AS uuid)
+    WHERE d."organizationId" = CAST(${outlineTeamId} AS uuid)
+      AND d."deletedAt" IS NULL
+    ORDER BY (dm."userId" IS NOT NULL) DESC, d."title" ASC
   `;
 }
 
@@ -52,6 +53,7 @@ export async function resolveOutlineDivision(
 
   return (
     divisions.find((division) => division.id === requestedDivisionId) ??
+    divisions.find((division) => division.isPrimary) ??
     divisions[0]
   );
 }
