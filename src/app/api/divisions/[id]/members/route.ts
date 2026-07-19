@@ -23,26 +23,14 @@ export async function GET(
     return NextResponse.json({ error: "Группа Outline не найдена" }, { status: 404 });
   }
 
-  const members = await db.user.findMany({
-    where: {
-      memberships: {
-        some: {
-          organizationId: member.organizationId,
-          isActive: true,
-        },
-      },
-      dayOffs: undefined,
-      AND: {
-        id: {
-          in: (
-            await db.divisionMember.findMany({
-              where: { divisionId: id },
-              select: { userId: true },
-            })
-          ).map((item) => item.userId),
-        },
-      },
-    },
+  const divisionMembers = await db.divisionMember.findMany({
+    where: { divisionId: id },
+    select: { userId: true },
+  });
+  const userIds = divisionMembers.map((item) => item.userId);
+
+  const users = await db.user.findMany({
+    where: { id: { in: userIds } },
     select: {
       id: true,
       firstName: true,
@@ -54,10 +42,11 @@ export async function GET(
         select: { role: true },
       },
     },
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
   });
 
   return NextResponse.json({
-    members: members.map((user) => ({
+    members: users.map((user) => ({
       id: user.id,
       firstName: user.firstName,
       lastName: user.lastName,
