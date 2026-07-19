@@ -5,10 +5,28 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
+FROM deps AS migrator
+WORKDIR /app
+COPY prisma ./prisma
+COPY prisma.config.ts ./prisma.config.ts
+RUN npx prisma generate
+CMD ["npx", "prisma", "migrate", "deploy"]
+
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Next.js may evaluate server modules during build. These values are build-only;
+# runtime services receive the real secrets and database URL from Compose.
+ARG DATABASE_URL=postgresql://outline:outline@localhost:5432/outline?schema=schedule
+ARG NEXTAUTH_SECRET=build-only-nextauth-secret
+ARG SCHEDULE_SSO_SECRET=build-only-schedule-secret
+ENV DATABASE_URL=${DATABASE_URL}
+ENV NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+ENV SCHEDULE_SSO_SECRET=${SCHEDULE_SSO_SECRET}
+ENV ALLOW_EMAIL_LOGIN=false
+
 RUN npx prisma generate
 RUN npm run build
 
