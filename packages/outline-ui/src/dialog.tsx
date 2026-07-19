@@ -47,10 +47,10 @@ export function DialogContent({
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute right-3 top-3"
+                className="qto-dialog-close"
                 aria-label="Закрыть"
               >
-                <XIcon className="size-4" />
+                <XIcon width={16} height={16} />
               </Button>
             </DialogPrimitive.Close>
           )}
@@ -61,7 +61,13 @@ export function DialogContent({
 }
 
 export function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="dialog-header" className={cx("qto-dialog-header", className)} {...props} />;
+  return (
+    <div
+      data-slot="dialog-header"
+      className={cx("qto-dialog-header", className)}
+      {...props}
+    />
+  );
 }
 
 export function DialogFooter({
@@ -71,7 +77,11 @@ export function DialogFooter({
   ...props
 }: React.ComponentProps<"div"> & { showCloseButton?: boolean }) {
   return (
-    <div data-slot="dialog-footer" className={cx("qto-dialog-footer", className)} {...props}>
+    <div
+      data-slot="dialog-footer"
+      className={cx("qto-dialog-footer", className)}
+      {...props}
+    >
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
@@ -102,7 +112,7 @@ export function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cx("qto-help mt-1", className)}
+      className={cx("qto-help", className)}
       {...props}
     />
   );
