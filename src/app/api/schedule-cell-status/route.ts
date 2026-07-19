@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
 import { getSelectedDivision } from "@/lib/selected-division";
 import { emitToOrg, emitToSchedule } from "@/lib/emit";
+import { isVacationCategoryName } from "@/lib/vacation";
 
 const cellStatusSchema = z.object({
   scheduleId: z.string().min(1),
@@ -114,9 +115,6 @@ export async function POST(request: NextRequest) {
   if (!member) {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   }
-  if (!isManagerOrAbove(member.role)) {
-    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
-  }
 
   const division = await getSelectedDivision(
     request,
@@ -125,6 +123,12 @@ export async function POST(request: NextRequest) {
   );
   if (!division) {
     return NextResponse.json({ error: "Нет доступного отдела" }, { status: 403 });
+  }
+  if (!isAdminOrAbove(member.role) && !division.isManager) {
+    return NextResponse.json(
+      { error: "Изменять график может руководитель выбранного подразделения или администратор" },
+      { status: 403 }
+    );
   }
 
   const parsed = cellStatusSchema.safeParse(
@@ -146,6 +150,13 @@ export async function POST(request: NextRequest) {
     dateTo,
     absenceId,
   } = parsed.data;
+
+  if (type === "VACATION") {
+    return NextResponse.json(
+      { error: "Отпуск добавляется на отдельной странице «Отпуск»" },
+      { status: 409 }
+    );
+  }
 
   const [schedule, divisionMember] = await Promise.all([
     db.schedule.findFirst({
@@ -177,7 +188,23 @@ export async function POST(request: NextRequest) {
   try {
     const result = await db.$transaction(async (tx) => {
       if (type === "CLEAR") {
-        await removeExistingAssignment(tx, scheduleId, division.id, userId, dayOfWeek);
+        if (absenceId) {
+          const absence = await tx.absence.findFirst({
+            where: { id: absenceId, userId },
+            include: { category: true },
+          });
+          if (absence && isVacationCategoryName(absence.category.name)) {
+            throw new Error("Отпуск удаляется на отдельной странице «Отпуск»");
+          }
+        }
+
+        await removeExistingAssignment(
+          tx,
+          scheduleId,
+          division.id,
+          userId,
+          dayOfWeek
+        );
         await tx.$executeRaw`
           DELETE FROM "schedule_day_offs"
           WHERE "scheduleId" = ${scheduleId}
@@ -206,7 +233,13 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        await removeExistingAssignment(tx, scheduleId, division.id, userId, dayOfWeek);
+        await removeExistingAssignment(
+          tx,
+          scheduleId,
+          division.id,
+          userId,
+          dayOfWeek
+        );
         await tx.$executeRaw`
           INSERT INTO "schedule_day_offs"
             ("id", "scheduleId", "userId", "dayOfWeek", "createdAt", "updatedAt")
@@ -219,7 +252,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (!dateFrom || !dateTo) {
-        throw new Error("Для отсутствия укажите период с и по");
+        throw new Error("Для больничного укажите период с и по");
       }
       const from = parseDate(dateFrom);
       const to = parseDate(dateTo);
@@ -273,28 +306,35 @@ export async function POST(request: NextRequest) {
         `;
       }
 
-      const categoryName = type === "VACATION" ? "Отпуск" : "Больничный";
-      const categoryColor = type === "VACATION" ? "#FFFFFF" : "#FEE2E2";
       let category = await tx.absenceCategory.findFirst({
         where: {
           organizationId: member.organizationId,
-          name: { equals: categoryName, mode: "insensitive" },
+          name: { equals: "Больничный", mode: "insensitive" },
         },
       });
       if (!category) {
         category = await tx.absenceCategory.create({
           data: {
             organizationId: member.organizationId,
-            name: categoryName,
-            color: categoryColor,
+            name: "Больничный",
+            color: "#FEE2E2",
             isPaid: true,
           },
         });
       }
 
       if (absenceId) {
-        const updated = await tx.absence.updateMany({
+        const existing = await tx.absence.findFirst({
           where: { id: absenceId, userId },
+          include: { category: true },
+        });
+        if (!existing) throw new Error("Период больничного не найден");
+        if (isVacationCategoryName(existing.category.name)) {
+          throw new Error("Отпуск изменяется на отдельной странице «Отпуск»");
+        }
+
+        await tx.absence.update({
+          where: { id: existing.id },
           data: {
             categoryId: category.id,
             dateFrom: from,
@@ -302,7 +342,6 @@ export async function POST(request: NextRequest) {
             status: "APPROVED",
           },
         });
-        if (updated.count !== 1) throw new Error("Период отсутствия не найден");
         return { type, absenceId };
       }
 
