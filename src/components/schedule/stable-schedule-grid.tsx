@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock3, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
@@ -46,75 +46,92 @@ type StableScheduleResponse = {
   members: StableMember[];
 };
 
-type EditableMember = StableMember & { days: WorkDay[] };
-
 const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
-function formatTime(minutes: number) {
-  const hours = Math.floor(minutes / 60)
+function formatTime(minutes: number): string {
+  const safeMinutes = Math.min(minutes, 1439);
+  return `${Math.floor(safeMinutes / 60).toString().padStart(2, "0")}:${(
+    safeMinutes % 60
+  )
     .toString()
-    .padStart(2, "0");
-  const mins = (minutes % 60).toString().padStart(2, "0");
-  return `${hours}:${mins}`;
+    .padStart(2, "0")}`;
 }
 
 function parseTime(value: string): number | null {
-  if (!/^\d{2}:\d{2}$/.test(value)) return null;
-  const [hours, minutes] = value.split(":").map(Number);
-  const total = hours * 60 + minutes;
-  return total >= 0 && total <= 1440 ? total : null;
+  const parts = value.split(":");
+  if (parts.length !== 2) return null;
+  const hours = Number(parts[0]);
+  const minutes = Number(parts[1]);
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+  return hours * 60 + minutes;
 }
 
-function durationLabel(minutes: number) {
+function durationLabel(minutes: number): string {
   const sign = minutes > 0 ? "+" : minutes < 0 ? "−" : "";
   const absolute = Math.abs(minutes);
-  const hours = Math.floor(absolute / 60);
-  const rest = absolute % 60;
-  return `${sign}${hours}:${rest.toString().padStart(2, "0")}`;
+  return `${sign}${Math.floor(absolute / 60)}:${(absolute % 60)
+    .toString()
+    .padStart(2, "0")}`;
 }
 
-function defaultDays(member: StableMember): WorkDay[] {
-  const existing = new Map(member.days.map((day) => [day.dayOfWeek, day]));
-  return Array.from({ length: 7 }, (_, index) => {
+function createDefaultIntervals(targetMinutes: number): Interval[] {
+  if (targetMinutes <= 0) return [];
+  if (targetMinutes === 480) {
+    return [
+      { kind: "WORK", startMinute: 480, endMinute: 720 },
+      { kind: "WORK", startMinute: 780, endMinute: 1020 },
+    ];
+  }
+  return [
+    {
+      kind: "WORK",
+      startMinute: 480,
+      endMinute: Math.min(1439, 480 + targetMinutes),
+    },
+  ];
+}
+
+function editableDays(member: StableMember): WorkDay[] {
+  const saved = new Map<number, WorkDay>(
+    member.days.map((day) => [day.dayOfWeek, day])
+  );
+
+  return Array.from({ length: 7 }, (_, index): WorkDay => {
     const dayOfWeek = index + 1;
-    const saved = existing.get(dayOfWeek);
-    if (saved) {
+    const existing = saved.get(dayOfWeek);
+    if (existing) {
       return {
-        ...saved,
-        intervals: saved.intervals.map((interval) => ({ ...interval })),
+        ...existing,
+        intervals: existing.intervals.map(
+          (interval): Interval => ({ ...interval })
+        ),
       };
     }
 
     const isWorkingDay = dayOfWeek <= 5;
-    const target = member.dailyTargetMinutes;
-    const intervals: Interval[] = [];
-    if (isWorkingDay && target > 0) {
-      if (target === 480) {
-        intervals.push(
-          { kind: "WORK", startMinute: 8 * 60, endMinute: 12 * 60 },
-          { kind: "WORK", startMinute: 13 * 60, endMinute: 17 * 60 }
-        );
-      } else {
-        intervals.push({
-          kind: "WORK",
-          startMinute: 8 * 60,
-          endMinute: Math.min(24 * 60, 8 * 60 + target),
-        });
-      }
-    }
-
     return {
       dayOfWeek,
       isWorkingDay,
       targetMinutes: null,
-      intervals,
+      intervals: isWorkingDay
+        ? createDefaultIntervals(member.dailyTargetMinutes)
+        : [],
     };
   });
 }
 
 export function StableScheduleGrid({ divisionId }: { divisionId: string }) {
   const queryClient = useQueryClient();
-  const [editing, setEditing] = useState<EditableMember | null>(null);
+  const [editing, setEditing] = useState<StableMember | null>(null);
 
   const { data, isLoading, error } = useQuery<StableScheduleResponse>({
     queryKey: ["stable-schedule", divisionId],
@@ -123,13 +140,15 @@ export function StableScheduleGrid({ divisionId }: { divisionId: string }) {
         `/api/stable-schedule?divisionId=${encodeURIComponent(divisionId)}`
       );
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Не удалось загрузить график");
+      if (!response.ok) {
+        throw new Error(payload.error || "Не удалось загрузить график");
+      }
       return payload;
     },
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (member: EditableMember) => {
+    mutationFn: async (member: StableMember) => {
       const response = await fetch("/api/stable-schedule", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -142,8 +161,9 @@ export function StableScheduleGrid({ divisionId }: { divisionId: string }) {
         }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Не удалось сохранить график");
-      return payload;
+      if (!response.ok) {
+        throw new Error(payload.error || "Не удалось сохранить график");
+      }
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
@@ -155,19 +175,12 @@ export function StableScheduleGrid({ divisionId }: { divisionId: string }) {
     onError: (mutationError: Error) => toast.error(mutationError.message),
   });
 
-  const daysByMember = useMemo(() => {
-    const result = new Map<string, Map<number, WorkDay>>();
-    for (const member of data?.members ?? []) {
-      result.set(
-        member.userId,
-        new Map(member.days.map((day) => [day.dayOfWeek, day]))
-      );
-    }
-    return result;
-  }, [data?.members]);
-
   if (isLoading) {
-    return <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">Загрузка стабильного графика…</div>;
+    return (
+      <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+        Загрузка стабильного графика…
+      </div>
+    );
   }
   if (error || !data) {
     return (
@@ -187,13 +200,17 @@ export function StableScheduleGrid({ divisionId }: { divisionId: string }) {
   return (
     <>
       <div className="overflow-x-auto rounded-lg border bg-card">
-        <table className="min-w-[1100px] w-full border-collapse text-sm">
+        <table className="w-full min-w-[1100px] border-collapse text-sm">
           <thead>
             <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
-              <th className="sticky left-0 z-10 min-w-64 bg-muted/95 px-4 py-3">Сотрудник</th>
+              <th className="sticky left-0 z-10 min-w-64 bg-muted/95 px-4 py-3">
+                Сотрудник
+              </th>
               <th className="w-28 px-3 py-3">Норма</th>
               {dayNames.map((day) => (
-                <th key={day} className="min-w-28 px-3 py-3 text-center">{day}</th>
+                <th key={day} className="min-w-28 px-3 py-3 text-center">
+                  {day}
+                </th>
               ))}
               <th className="w-24 px-3 py-3 text-center">Баланс</th>
             </tr>
@@ -201,26 +218,39 @@ export function StableScheduleGrid({ divisionId }: { divisionId: string }) {
           <tbody>
             {data.members.map((member) => {
               const isCurrent = member.userId === data.currentUserId;
-              const memberDays = daysByMember.get(member.userId) ?? new Map();
+              const memberDays = new Map<number, WorkDay>(
+                member.days.map((day) => [day.dayOfWeek, day])
+              );
+
               return (
                 <tr
                   key={member.userId}
                   className={cn(
                     "border-b last:border-b-0",
-                    isCurrent && "bg-primary/[0.07] ring-1 ring-inset ring-primary/25"
+                    isCurrent &&
+                      "bg-primary/[0.07] ring-1 ring-inset ring-primary/25"
                   )}
                 >
-                  <td className={cn("sticky left-0 z-[5] px-4 py-3", isCurrent ? "bg-primary/[0.07]" : "bg-card")}>
+                  <td
+                    className={cn(
+                      "sticky left-0 z-[5] px-4 py-3",
+                      isCurrent ? "bg-primary/[0.07]" : "bg-card"
+                    )}
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="truncate font-medium">
                           {member.name}
                           {isCurrent && (
-                            <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">Вы</span>
+                            <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                              Вы
+                            </span>
                           )}
                         </div>
                         {member.email && (
-                          <div className="truncate text-xs text-muted-foreground">{member.email}</div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {member.email}
+                          </div>
                         )}
                       </div>
                       {member.canEdit && (
@@ -229,7 +259,10 @@ export function StableScheduleGrid({ divisionId }: { divisionId: string }) {
                           title="Изменить график"
                           className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                           onClick={() =>
-                            setEditing({ ...member, days: defaultDays(member) })
+                            setEditing({
+                              ...member,
+                              days: editableDays(member),
+                            })
                           }
                         >
                           <Pencil className="size-4" />
@@ -238,21 +271,40 @@ export function StableScheduleGrid({ divisionId }: { divisionId: string }) {
                     </div>
                   </td>
                   <td className="px-3 py-3 text-xs">
-                    <div>{durationLabel(member.dailyTargetMinutes).replace("+", "")}/день</div>
-                    <div className="text-muted-foreground">{durationLabel(member.weeklyTargetMinutes).replace("+", "")}/нед.</div>
+                    <div>
+                      {durationLabel(member.dailyTargetMinutes).replace("+", "")}
+                      /день
+                    </div>
+                    <div className="text-muted-foreground">
+                      {durationLabel(member.weeklyTargetMinutes).replace("+", "")}
+                      /нед.
+                    </div>
                   </td>
-                  {Array.from({ length: 7 }, (_, index) => {
+                  {dayNames.map((_, index) => {
                     const day = memberDays.get(index + 1);
-                    const work = day?.intervals.filter((interval) => interval.kind === "WORK") ?? [];
+                    const intervals: Interval[] =
+                      day?.intervals.filter(
+                        (interval: Interval) => interval.kind === "WORK"
+                      ) ?? [];
                     return (
-                      <td key={index} className="border-l px-2 py-3 text-center text-xs">
-                        {!day || !day.isWorkingDay || work.length === 0 ? (
+                      <td
+                        key={index}
+                        className="border-l px-2 py-3 text-center text-xs"
+                      >
+                        {!day || !day.isWorkingDay || intervals.length === 0 ? (
                           <span className="text-muted-foreground">Выходной</span>
                         ) : (
                           <div className="space-y-1">
-                            {work.map((interval) => (
-                              <div key={interval.id ?? `${interval.startMinute}-${interval.endMinute}`} className="whitespace-nowrap font-medium">
-                                {formatTime(interval.startMinute)}–{formatTime(interval.endMinute)}
+                            {intervals.map((interval: Interval) => (
+                              <div
+                                key={
+                                  interval.id ??
+                                  `${interval.startMinute}-${interval.endMinute}`
+                                }
+                                className="whitespace-nowrap font-medium"
+                              >
+                                {formatTime(interval.startMinute)}–
+                                {formatTime(interval.endMinute)}
                               </div>
                             ))}
                           </div>
@@ -260,7 +312,13 @@ export function StableScheduleGrid({ divisionId }: { divisionId: string }) {
                       </td>
                     );
                   })}
-                  <td className={cn("px-3 py-3 text-center font-medium", member.balanceMinutes < 0 && "text-destructive", member.balanceMinutes > 0 && "text-emerald-600")}>
+                  <td
+                    className={cn(
+                      "px-3 py-3 text-center font-medium",
+                      member.balanceMinutes < 0 && "text-destructive",
+                      member.balanceMinutes > 0 && "text-emerald-600"
+                    )}
+                  >
                     {durationLabel(member.balanceMinutes)}
                   </td>
                 </tr>
@@ -271,7 +329,7 @@ export function StableScheduleGrid({ divisionId }: { divisionId: string }) {
       </div>
 
       {editing && (
-        <StableScheduleEditor
+        <StableEditor
           member={editing}
           canManage={data.canManage}
           saving={saveMutation.isPending}
@@ -284,7 +342,7 @@ export function StableScheduleGrid({ divisionId }: { divisionId: string }) {
   );
 }
 
-function StableScheduleEditor({
+function StableEditor({
   member,
   canManage,
   saving,
@@ -292,46 +350,53 @@ function StableScheduleEditor({
   onClose,
   onSave,
 }: {
-  member: EditableMember;
+  member: StableMember;
   canManage: boolean;
   saving: boolean;
-  onChange: (member: EditableMember) => void;
+  onChange: (member: StableMember) => void;
   onClose: () => void;
   onSave: () => void;
 }) {
-  function updateDay(dayOfWeek: number, updater: (day: WorkDay) => WorkDay) {
+  function changeDay(dayOfWeek: number, change: (day: WorkDay) => WorkDay) {
     onChange({
       ...member,
       days: member.days.map((day) =>
-        day.dayOfWeek === dayOfWeek ? updater(day) : day
+        day.dayOfWeek === dayOfWeek ? change(day) : day
       ),
     });
   }
 
-  function updateInterval(
+  function changeTime(
     dayOfWeek: number,
-    index: number,
+    intervalIndex: number,
     field: "startMinute" | "endMinute",
     value: string
   ) {
-    const parsed = parseTime(value);
-    if (parsed === null) return;
-    updateDay(dayOfWeek, (day) => ({
+    const minutes = parseTime(value);
+    if (minutes === null) return;
+    changeDay(dayOfWeek, (day) => ({
       ...day,
-      intervals: day.intervals.map((interval, intervalIndex) =>
-        intervalIndex === index ? { ...interval, [field]: parsed } : interval
+      intervals: day.intervals.map((interval, index) =>
+        index === intervalIndex ? { ...interval, [field]: minutes } : interval
       ),
     }));
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
-      <section className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-xl border bg-background p-5 shadow-xl" onMouseDown={(event) => event.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onMouseDown={onClose}
+    >
+      <section
+        className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-xl border bg-background p-5 shadow-xl"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold">График: {member.name}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Рабочие интервалы должны точно соответствовать назначенной норме. Перерыв между интервалами не входит в рабочее время.
+              Перерыв между рабочими интервалами не входит в рабочее время.
+              Сумма интервалов должна совпадать с назначенной нормой.
             </p>
           </div>
           <button type="button" className="rounded p-2 hover:bg-muted" onClick={onClose}>
@@ -341,7 +406,7 @@ function StableScheduleEditor({
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">Рабочих часов в обычный день</span>
+            <span className="text-muted-foreground">Часов в обычный день</span>
             <input
               type="number"
               min={0}
@@ -359,7 +424,7 @@ function StableScheduleEditor({
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">Рабочих часов в неделю</span>
+            <span className="text-muted-foreground">Часов в неделю</span>
             <input
               type="number"
               min={0}
@@ -380,23 +445,34 @@ function StableScheduleEditor({
 
         <div className="mt-5 space-y-3">
           {member.days.map((day) => {
-            const workIntervals = day.intervals.filter((interval) => interval.kind === "WORK");
-            const workMinutes = workIntervals.reduce(
-              (sum, interval) => sum + interval.endMinute - interval.startMinute,
+            const intervals: Interval[] = day.intervals.filter(
+              (interval: Interval) => interval.kind === "WORK"
+            );
+            const worked = intervals.reduce(
+              (sum, interval) =>
+                sum + interval.endMinute - interval.startMinute,
               0
             );
             const target = day.targetMinutes ?? member.dailyTargetMinutes;
+
             return (
-              <div key={day.dayOfWeek} className="grid gap-3 rounded-lg border p-3 md:grid-cols-[90px_1fr_110px] md:items-center">
+              <div
+                key={day.dayOfWeek}
+                className="grid gap-3 rounded-lg border p-3 md:grid-cols-[90px_1fr_120px] md:items-center"
+              >
                 <label className="flex items-center gap-2 font-medium">
                   <input
                     type="checkbox"
                     checked={day.isWorkingDay}
                     onChange={(event) =>
-                      updateDay(day.dayOfWeek, (current) => ({
+                      changeDay(day.dayOfWeek, (current) => ({
                         ...current,
                         isWorkingDay: event.target.checked,
-                        intervals: event.target.checked ? current.intervals : [],
+                        intervals: event.target.checked
+                          ? current.intervals.length > 0
+                            ? current.intervals
+                            : createDefaultIntervals(member.dailyTargetMinutes)
+                          : [],
                       }))
                     }
                   />
@@ -405,13 +481,21 @@ function StableScheduleEditor({
 
                 {day.isWorkingDay ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    {workIntervals.map((interval, index) => (
-                      <div key={index} className="flex items-center gap-1 rounded-md bg-muted/50 p-1.5">
+                    {intervals.map((interval, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-1 rounded-md bg-muted/50 p-1.5"
+                      >
                         <input
                           type="time"
                           value={formatTime(interval.startMinute)}
                           onChange={(event) =>
-                            updateInterval(day.dayOfWeek, index, "startMinute", event.target.value)
+                            changeTime(
+                              day.dayOfWeek,
+                              index,
+                              "startMinute",
+                              event.target.value
+                            )
                           }
                           className="h-8 rounded border bg-background px-2"
                         />
@@ -420,7 +504,12 @@ function StableScheduleEditor({
                           type="time"
                           value={formatTime(interval.endMinute)}
                           onChange={(event) =>
-                            updateInterval(day.dayOfWeek, index, "endMinute", event.target.value)
+                            changeTime(
+                              day.dayOfWeek,
+                              index,
+                              "endMinute",
+                              event.target.value
+                            )
                           }
                           className="h-8 rounded border bg-background px-2"
                         />
@@ -428,9 +517,11 @@ function StableScheduleEditor({
                           type="button"
                           className="rounded p-1 text-muted-foreground hover:text-destructive"
                           onClick={() =>
-                            updateDay(day.dayOfWeek, (current) => ({
+                            changeDay(day.dayOfWeek, (current) => ({
                               ...current,
-                              intervals: current.intervals.filter((_, intervalIndex) => intervalIndex !== index),
+                              intervals: current.intervals.filter(
+                                (_, currentIndex) => currentIndex !== index
+                              ),
                             }))
                           }
                         >
@@ -438,25 +529,26 @@ function StableScheduleEditor({
                         </button>
                       </div>
                     ))}
-                    {workIntervals.length < 3 && (
+                    {intervals.length < 3 && (
                       <button
                         type="button"
                         className="rounded-md border border-dashed px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground"
                         onClick={() =>
-                          updateDay(day.dayOfWeek, (current) => ({
-                            ...current,
-                            intervals: [
-                              ...current.intervals,
-                              {
-                                kind: "WORK",
-                                startMinute: current.intervals.at(-1)?.endMinute ?? 8 * 60,
-                                endMinute: Math.min(
-                                  24 * 60,
-                                  (current.intervals.at(-1)?.endMinute ?? 8 * 60) + 60
-                                ),
-                              },
-                            ],
-                          }))
+                          changeDay(day.dayOfWeek, (current) => {
+                            const last = current.intervals.at(-1);
+                            const startMinute = last?.endMinute ?? 480;
+                            return {
+                              ...current,
+                              intervals: [
+                                ...current.intervals,
+                                {
+                                  kind: "WORK",
+                                  startMinute,
+                                  endMinute: Math.min(1439, startMinute + 60),
+                                },
+                              ],
+                            };
+                          })
                         }
                       >
                         + интервал
@@ -467,9 +559,17 @@ function StableScheduleEditor({
                   <span className="text-sm text-muted-foreground">Выходной</span>
                 )}
 
-                <div className={cn("flex items-center gap-1 text-sm", day.isWorkingDay && workMinutes !== target ? "text-destructive" : "text-muted-foreground")}>
+                <div
+                  className={cn(
+                    "flex items-center gap-1 text-sm",
+                    day.isWorkingDay && worked !== target
+                      ? "text-destructive"
+                      : "text-muted-foreground"
+                  )}
+                >
                   <Clock3 className="size-4" />
-                  {durationLabel(workMinutes).replace("+", "")} / {durationLabel(day.isWorkingDay ? target : 0).replace("+", "")}
+                  {durationLabel(worked).replace("+", "")} /{" "}
+                  {durationLabel(day.isWorkingDay ? target : 0).replace("+", "")}
                 </div>
               </div>
             );
@@ -477,7 +577,9 @@ function StableScheduleEditor({
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose}>Отмена</Button>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Отмена
+          </Button>
           <Button type="button" disabled={saving} onClick={onSave}>
             {saving ? "Сохранение…" : "Сохранить график"}
           </Button>
