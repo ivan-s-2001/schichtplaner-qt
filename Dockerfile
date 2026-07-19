@@ -8,6 +8,7 @@ RUN npm ci
 FROM deps AS migrator
 WORKDIR /app
 COPY prisma ./prisma
+COPY prisma.config.ts ./prisma.config.ts
 RUN npx prisma generate
 CMD ["npx", "prisma", "migrate", "deploy"]
 
