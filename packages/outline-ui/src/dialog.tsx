@@ -28,6 +28,7 @@ export function DialogContent({
   className,
   children,
   showCloseButton = true,
+  style,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
@@ -39,6 +40,7 @@ export function DialogContent({
         <DialogPrimitive.Content
           data-slot="dialog-content"
           className={cx("qto-dialog", className)}
+          style={{ position: "relative", ...style }}
           {...props}
         >
           {children}
