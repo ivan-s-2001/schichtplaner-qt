@@ -30,7 +30,9 @@
 }
 
 .schedule-equal-day-columns table[class*="min-w-[1080px]"] thead th.bg-emerald-700,
-.schedule-equal-day-columns table[class*="min-w-[1100px]"] thead th.bg-emerald-700 {
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] thead th.bg-emerald-700,
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] thead th:nth-child(8),
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] thead th:nth-child(9) {
   background: color-mix(
     in srgb,
     var(--outline-success) 14%,
@@ -61,12 +63,19 @@
 }
 
 .schedule-equal-day-columns table[class*="min-w-[1080px]"] tbody td[class*="bg-emerald"],
-.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody td[class*="bg-emerald"] {
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody td[class*="bg-emerald"],
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody td:nth-child(8),
+.schedule-equal-day-columns table[class*="min-w-[1100px]"] tbody td:nth-child(9) {
   background: color-mix(
     in srgb,
     var(--outline-success) 7%,
     var(--background)
   ) !important;
+}
+
+.schedule-equal-day-columns table[class*="min-w-[1080px]"] [class*="bg-indigo-600"] {
+  background: var(--primary) !important;
+  color: var(--primary-foreground) !important;
 }
 
 .schedule-equal-day-columns table[class*="min-w-[1080px]"] tbody button.relative {
