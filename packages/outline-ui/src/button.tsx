@@ -27,39 +27,41 @@ export type ButtonSize =
 
 export type ButtonProps = React.ComponentProps<"button"> & {
   asChild?: boolean;
-  variant?: ButtonVariant;
-  size?: ButtonSize;
+  variant?: ButtonVariant | null;
+  size?: ButtonSize | null;
 };
 
 export function Button({
   asChild = false,
-  variant = "default",
-  size = "default",
+  variant,
+  size,
   className,
   ...props
 }: ButtonProps) {
+  const resolvedVariant = variant ?? "default";
+  const resolvedSize = size ?? "default";
   const Component = asChild ? Slot.Root : "button";
-  const neutral = variant === "neutral" || variant === "outline";
-  const secondary = variant === "secondary";
-  const danger = variant === "danger" || variant === "destructive";
+  const neutral = resolvedVariant === "neutral" || resolvedVariant === "outline";
+  const secondary = resolvedVariant === "secondary";
+  const danger = resolvedVariant === "danger" || resolvedVariant === "destructive";
 
   return (
     <Component
       data-slot="button"
-      data-variant={variant}
-      data-size={size}
+      data-variant={resolvedVariant}
+      data-size={resolvedSize}
       className={cx(
         "qto-button",
         neutral && "qto-button--neutral",
         secondary && "qto-button--secondary",
-        variant === "ghost" && "qto-button--ghost",
-        variant === "link" && "qto-button--link",
+        resolvedVariant === "ghost" && "qto-button--ghost",
+        resolvedVariant === "link" && "qto-button--link",
         danger && "qto-button--danger",
-        (size === "compact" || size === "xs") && "qto-button--xs",
-        size === "lg" && "qto-button--lg",
-        (size === "icon" || size === "icon-sm") && "qto-button--icon",
-        size === "icon-xs" && "qto-button--icon-xs",
-        size === "icon-lg" && "qto-button--icon-lg",
+        (resolvedSize === "compact" || resolvedSize === "xs") && "qto-button--xs",
+        resolvedSize === "lg" && "qto-button--lg",
+        (resolvedSize === "icon" || resolvedSize === "icon-sm") && "qto-button--icon",
+        resolvedSize === "icon-xs" && "qto-button--icon-xs",
+        resolvedSize === "icon-lg" && "qto-button--icon-lg",
         className
       )}
       {...props}
