@@ -4,14 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
-  CalendarDays,
-  Clock,
-  Users,
-  MessageSquare,
-  BarChart3,
-  Settings,
-  Sparkles,
-} from "lucide-react";
+  CalendarIcon,
+  ClockIcon,
+  TeamIcon,
+  CommentIcon,
+  GraphIcon,
+  SettingsIcon,
+  SparklesIcon,
+} from "@/components/icons/outline-icons";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "./user-menu";
 import { MobileNav } from "./mobile-nav";
@@ -19,12 +19,12 @@ import { ConnectionStatus } from "./connection-status";
 import { DivisionSwitcher } from "./division-switcher";
 
 const navItems = [
-  { key: "schedule", icon: CalendarDays, href: "/schedule/employee", label: "График" },
-  { key: "time", icon: Clock, href: "/time", label: "Учёт времени" },
-  { key: "employees", icon: Users, href: "/employees", label: "Сотрудники" },
-  { key: "portal", icon: MessageSquare, href: "/portal/inbox", label: "Портал" },
-  { key: "reporting", icon: BarChart3, href: "/reporting", label: "Отчёты" },
-  { key: "settings", icon: Settings, href: "/settings", label: "Настройки" },
+  { key: "schedule", icon: CalendarIcon, href: "/schedule/employee", label: "График" },
+  { key: "time", icon: ClockIcon, href: "/time", label: "Учёт времени" },
+  { key: "employees", icon: TeamIcon, href: "/employees", label: "Сотрудники" },
+  { key: "portal", icon: CommentIcon, href: "/portal/inbox", label: "Портал" },
+  { key: "reporting", icon: GraphIcon, href: "/reporting", label: "Отчёты" },
+  { key: "settings", icon: SettingsIcon, href: "/settings", label: "Настройки" },
 ] as const;
 
 export { navItems };
@@ -47,22 +47,22 @@ export function TopNav() {
 
   const itemClass = (active: boolean) =>
     cn(
-      "relative flex min-h-8 items-center gap-1.5 rounded-sm px-2.5 text-sm font-medium text-[#4e5c6e] transition-colors duration-150",
+      "relative flex min-h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors duration-150",
       active
-        ? "bg-[#cdd8e5] text-[#111319]"
-        : "hover:bg-[#dee5ed] hover:text-[#111319]"
+        ? "bg-accent text-foreground"
+        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
     );
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[#dae1e9] bg-[#eef2f6]">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/88">
       <div className="mx-auto flex h-12 max-w-[1600px] items-center gap-2 px-4 md:px-6 lg:px-8">
         <MobileNav />
 
         <Link
           href="/schedule/employee"
-          className="mr-3 flex min-w-0 items-center gap-2 rounded-sm px-1.5 py-1 text-sm font-semibold text-[#111319] hover:bg-[#dee5ed]"
+          className="mr-3 flex min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-sm font-semibold text-foreground hover:bg-secondary"
         >
-          <CalendarDays className="size-5 text-[#4e5c6e]" />
+          <CalendarIcon className="size-5 text-muted-foreground" />
           <span className="hidden truncate sm:inline">QuickTickets</span>
         </Link>
 
@@ -75,7 +75,7 @@ export function TopNav() {
                 <Icon className="size-4" />
                 <span className="hidden lg:inline">{item.label}</span>
                 {item.key === "portal" && unreadCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-[#ed2651] text-[10px] font-semibold text-white">
+                  <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-white">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}
@@ -88,7 +88,7 @@ export function TopNav() {
           <DivisionSwitcher />
 
           <Link href="/ai/chat" className={itemClass(pathname.startsWith("/ai"))}>
-            <Sparkles className="size-4" />
+            <SparklesIcon className="size-4" />
             <span className="hidden lg:inline">ИИ</span>
           </Link>
 
