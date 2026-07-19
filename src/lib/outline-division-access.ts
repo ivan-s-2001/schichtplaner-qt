@@ -9,39 +9,28 @@ export type OutlineDivision = {
 };
 
 /**
- * Reads access directly from Outline on every request. This makes removal from
- * a group effective immediately, even while the Schichtplaner session remains
- * active. Outline admins may switch to every active group in their workspace.
+ * Reads departments directly from Outline. The scheduling department ID is the
+ * same UUID as public.groups.id; there is no copied division table.
  */
 export async function getOutlineDivisions(
-  scheduleUserId: string,
-  scheduleOrganizationId: string
+  outlineUserId: string,
+  outlineTeamId: string
 ): Promise<OutlineDivision[]> {
   return db.$queryRaw<OutlineDivision[]>`
     SELECT DISTINCT
-      d."id" AS "id",
-      d."title" AS "title",
-      d."description" AS "description",
-      d."color" AS "color",
-      ogl."outlineGroupId"::text AS "outlineGroupId"
-    FROM "divisions" d
-    INNER JOIN "outline_group_links" ogl
-      ON ogl."scheduleDivisionId" = d."id"
-    INNER JOIN "outline_team_links" otl
-      ON otl."scheduleOrganizationId" = d."organizationId"
-    INNER JOIN "outline_user_links" oul
-      ON oul."scheduleUserId" = ${scheduleUserId}
-    INNER JOIN public."users" u
-      ON u."id" = oul."outlineUserId"
-      AND u."teamId" = otl."outlineTeamId"
+      g."id"::text AS "id",
+      g."name" AS "title",
+      g."description" AS "description",
+      '#6366f1'::text AS "color",
+      g."id"::text AS "outlineGroupId"
+    FROM public."users" u
     INNER JOIN public."groups" g
-      ON g."id" = ogl."outlineGroupId"
-      AND g."teamId" = u."teamId"
+      ON g."teamId" = u."teamId"
     LEFT JOIN public."group_users" gu
       ON gu."groupId" = g."id"
       AND gu."userId" = u."id"
-    WHERE d."organizationId" = ${scheduleOrganizationId}
-      AND d."deletedAt" IS NULL
+    WHERE u."id" = CAST(${outlineUserId} AS uuid)
+      AND u."teamId" = CAST(${outlineTeamId} AS uuid)
       AND u."deletedAt" IS NULL
       AND u."suspendedAt" IS NULL
       AND g."deletedAt" IS NULL
@@ -49,19 +38,16 @@ export async function getOutlineDivisions(
         u."role"::text = 'admin'
         OR gu."userId" IS NOT NULL
       )
-    ORDER BY d."title" ASC
+    ORDER BY g."name" ASC
   `;
 }
 
 export async function resolveOutlineDivision(
-  scheduleUserId: string,
-  scheduleOrganizationId: string,
+  outlineUserId: string,
+  outlineTeamId: string,
   requestedDivisionId: string | null | undefined
 ): Promise<OutlineDivision | null> {
-  const divisions = await getOutlineDivisions(
-    scheduleUserId,
-    scheduleOrganizationId
-  );
+  const divisions = await getOutlineDivisions(outlineUserId, outlineTeamId);
   if (divisions.length === 0) return null;
 
   return (
