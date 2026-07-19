@@ -6,13 +6,24 @@ import { useRouter } from "next/navigation";
 import { Loader2, LockKeyhole } from "lucide-react";
 
 interface EmailAccessGateProps {
+  userId: string | null;
+  teamId: string | null;
+  signature: string | null;
   token: string | null;
   email: string | null;
+  embedded: boolean;
 }
 
 type AccessState = "checking" | "blocked";
 
-export function EmailAccessGate({ token, email }: EmailAccessGateProps) {
+export function EmailAccessGate({
+  userId,
+  teamId,
+  signature,
+  token,
+  email,
+  embedded,
+}: EmailAccessGateProps) {
   const router = useRouter();
   const [state, setState] = useState<AccessState>("checking");
 
@@ -22,12 +33,16 @@ export function EmailAccessGate({ token, email }: EmailAccessGateProps) {
     async function authorize() {
       await signOut({ redirect: false });
 
-      if (!token && !email) {
+      const hasSignedIdentity = Boolean(userId && teamId && signature);
+      if (!hasSignedIdentity && !token && !email) {
         if (!cancelled) setState("blocked");
         return;
       }
 
       const result = await signIn("credentials", {
+        userId: userId ?? undefined,
+        teamId: teamId ?? undefined,
+        signature: signature ?? undefined,
         token: token ?? undefined,
         email: email ?? undefined,
         redirect: false,
@@ -40,6 +55,10 @@ export function EmailAccessGate({ token, email }: EmailAccessGateProps) {
         return;
       }
 
+      document.cookie = embedded
+        ? "schedule-embedded=1; Path=/; Max-Age=2592000; SameSite=Lax"
+        : "schedule-embedded=; Path=/; Max-Age=0; SameSite=Lax";
+
       router.replace("/schedule/employee");
       router.refresh();
     }
@@ -51,7 +70,7 @@ export function EmailAccessGate({ token, email }: EmailAccessGateProps) {
     return () => {
       cancelled = true;
     };
-  }, [email, router, token]);
+  }, [email, embedded, router, signature, teamId, token, userId]);
 
   if (state === "checking") {
     return (
@@ -70,7 +89,7 @@ export function EmailAccessGate({ token, email }: EmailAccessGateProps) {
         <LockKeyhole className="mx-auto size-10 text-destructive" />
         <h1 className="mt-4 text-2xl font-bold">Доступ заблокирован</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Откройте расписание из Outline. Ссылка входа одноразовая и действует 60 секунд.
+          Откройте расписание через пункт «Расписание» в Outline.
         </p>
       </section>
     </main>

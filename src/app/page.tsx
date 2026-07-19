@@ -13,8 +13,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   return (
     <EmailAccessGate
+      userId={first(params.userId)}
+      teamId={first(params.teamId)}
+      signature={first(params.signature)}
       token={first(params.token)}
       email={first(params.email)}
+      embedded={first(params.embed) === "1"}
     />
   );
 }

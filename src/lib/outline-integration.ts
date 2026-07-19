@@ -28,12 +28,33 @@ function decodeJsonPart<T>(value: string): T {
   return JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as T;
 }
 
-export function verifyOutlineToken(token: string): OutlineTokenPayload {
+function getSsoSecret(): string {
   const secret = process.env.SCHEDULE_SSO_SECRET;
   if (!secret) {
     throw new Error("SCHEDULE_SSO_SECRET is not configured");
   }
+  return secret;
+}
 
+export function verifyOutlineIdentity(
+  userId: string,
+  teamId: string,
+  signature: string
+): void {
+  const expectedSignature = createHmac("sha256", getSsoSecret())
+    .update(`${userId}:${teamId}`)
+    .digest();
+  const actualSignature = Buffer.from(signature, "base64url");
+
+  if (
+    actualSignature.length !== expectedSignature.length ||
+    !timingSafeEqual(actualSignature, expectedSignature)
+  ) {
+    throw new Error("Invalid Outline identity signature");
+  }
+}
+
+export function verifyOutlineToken(token: string): OutlineTokenPayload {
   const parts = token.split(".");
   if (parts.length !== 3) {
     throw new Error("Invalid Outline token");
@@ -45,7 +66,7 @@ export function verifyOutlineToken(token: string): OutlineTokenPayload {
     throw new Error("Unsupported Outline token algorithm");
   }
 
-  const expectedSignature = createHmac("sha256", secret)
+  const expectedSignature = createHmac("sha256", getSsoSecret())
     .update(`${encodedHeader}.${encodedPayload}`)
     .digest();
   const actualSignature = Buffer.from(encodedSignature, "base64url");
@@ -74,8 +95,9 @@ export function verifyOutlineToken(token: string): OutlineTokenPayload {
   return payload;
 }
 
-export async function loadOutlineSessionUser(
-  payload: OutlineTokenPayload
+export async function loadOutlineUserById(
+  userId: string,
+  teamId: string
 ): Promise<OutlineSessionUser> {
   const rows = await db.$queryRaw<OutlineSessionUser[]>`
     SELECT
@@ -87,8 +109,8 @@ export async function loadOutlineSessionUser(
       u."language" AS "language",
       u."role"::text AS "role"
     FROM public."users" u
-    WHERE u."id" = CAST(${payload.sub} AS uuid)
-      AND u."teamId" = CAST(${payload.teamId} AS uuid)
+    WHERE u."id" = CAST(${userId} AS uuid)
+      AND u."teamId" = CAST(${teamId} AS uuid)
       AND u."deletedAt" IS NULL
       AND u."suspendedAt" IS NULL
     LIMIT 1
@@ -100,4 +122,10 @@ export async function loadOutlineSessionUser(
   }
 
   return user;
+}
+
+export async function loadOutlineSessionUser(
+  payload: OutlineTokenPayload
+): Promise<OutlineSessionUser> {
+  return loadOutlineUserById(payload.sub, payload.teamId);
 }
