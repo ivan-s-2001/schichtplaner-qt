@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { EmployeeGridWrapper } from "./employee-grid-wrapper";
 import { ShiftLegend } from "./shift-legend";
 import { StableScheduleGrid } from "./stable-schedule-grid";
+import { TimeBalancePanel } from "./time-balance-panel";
 import { ViewSwitcher } from "./view-switcher";
 import { WeekNav } from "./week-nav";
 
@@ -92,7 +93,10 @@ export function DivisionScheduleView({
       </header>
 
       {isStable ? (
-        <StableScheduleGrid divisionId={division.id} />
+        <>
+          <TimeBalancePanel divisionId={division.id} />
+          <StableScheduleGrid divisionId={division.id} />
+        </>
       ) : (
         <>
           <WeekNav
