@@ -8,7 +8,10 @@ if (!connectionString) {
   throw new Error("DATABASE_URL is not configured");
 }
 
-const adapter = new PrismaPg({ connectionString });
+const adapter = new PrismaPg(
+  { connectionString },
+  { schema: process.env.DATABASE_SCHEMA || "schedule" }
+);
 const db = new PrismaClient({ adapter });
 
 async function main() {
@@ -42,7 +45,6 @@ async function main() {
       isActivated: true,
     },
   });
-  console.log("  Создан владелец: Юрин Иван <admin@qksr.ru>");
 
   await db.timeCategory.createMany({
     data: [
@@ -63,7 +65,6 @@ async function main() {
       },
     ],
   });
-  console.log("  Созданы категории рабочего времени");
 
   await db.absenceCategory.createMany({
     data: [
@@ -81,7 +82,6 @@ async function main() {
       },
     ],
   });
-  console.log("  Созданы категории отсутствий");
 
   await db.timeSettings.create({
     data: {
@@ -95,24 +95,9 @@ async function main() {
     },
   });
 
-  await db.orgSettings.create({
-    data: {
-      organizationId: organization.id,
-      aiEnabled: false,
-      aiAutoPlanner: false,
-      aiAnomalyDetection: false,
-      aiChatEnabled: false,
-      aiForecast: false,
-      aiSmartBriefing: false,
-      smsEnabled: false,
-    },
-  });
-  console.log("  Созданы настройки организации");
-
-  console.log("");
   console.log("Первоначальное заполнение завершено.");
-  console.log("Администратор: Юрин Иван <admin@qksr.ru>");
-  console.log("Пароль не используется. Вход выполняется через GET-параметр email.");
+  console.log("Локальный владелец: Юрин Иван <admin@qksr.ru>");
+  console.log("В рабочей связке пользователи синхронизируются из Outline.");
 }
 
 main()
