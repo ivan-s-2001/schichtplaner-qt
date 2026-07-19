@@ -52,8 +52,8 @@ jobs:
           exit 1
       - run: npm run build
 
-      - name: Build Schedule Docker image without external build arguments
-        run: docker build --target builder -t schedule-ci .
+      - name: Build complete Schedule Docker image
+        run: docker build -t schedule-ci .
 
   schema-contract:
     runs-on: ubuntu-latest
