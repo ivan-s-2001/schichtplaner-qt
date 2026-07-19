@@ -11,7 +11,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Tab, Tabs } from "@qt/outline-ui";
 import { DivisionSwitcher } from "./division-switcher";
 
 export type ProjectMode = "schedule" | "vacations";
@@ -78,44 +78,24 @@ export function TopNav({ mode }: { mode: ProjectMode }) {
         : scheduleItems;
 
   return (
-    <header className="outline-native-toolbar sticky top-0 z-40">
-      <div className="mx-auto flex min-h-16 w-full max-w-[1600px] items-stretch gap-3 px-4 md:px-11">
-        <nav
+    <header className="sticky top-0 z-40 bg-[var(--qto-background)]">
+      <div className="mx-auto flex w-full max-w-[1600px] items-stretch gap-4 px-4 md:px-11">
+        <Tabs
           aria-label={mode === "vacations" ? "Раздел отпусков" : "Разделы графика"}
-          className="outline-native-tabs min-w-0 flex-1 overflow-x-auto"
+          className="min-w-0 flex-1"
         >
-          <div className="flex h-full min-w-max items-stretch gap-1">
-            {items.map((item) => {
-              const Icon = item.icon;
-              const active = itemIsActive(pathname, item.href);
+          {items.map((item) => {
+            const active = itemIsActive(pathname, item.href);
 
-              return (
-                <Link
-                  key={item.key}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "outline-native-tab relative flex min-h-16 items-center gap-2 px-3 text-sm font-medium",
-                    active
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Icon className="size-4" strokeWidth={1.8} />
-                  <span>{item.label}</span>
-                  {active && (
-                    <span
-                      aria-hidden="true"
-                      className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary"
-                    />
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
+            return (
+              <Tab key={item.key} active={active} asChild>
+                <Link href={item.href}>{item.label}</Link>
+              </Tab>
+            );
+          })}
+        </Tabs>
 
-        <div className="flex shrink-0 items-center">
+        <div className="flex shrink-0 items-center border-b border-[var(--qto-divider)]">
           <DivisionSwitcher />
         </div>
       </div>
