@@ -31,10 +31,10 @@ export default async function EmployeeKWPage({ params }: EmployeeKWPageProps) {
     <div className="schedule-equal-day-columns space-y-5">
       <header className="space-y-3">
         <div>
-          <h1 className="text-[26px] font-medium leading-tight text-[#111319]">
+          <h1 className="text-[26px] font-medium leading-tight text-foreground">
             График отдела
           </h1>
-          <p className="mt-1 text-sm text-[#66778f]">
+          <p className="mt-1 text-sm text-muted-foreground">
             Отдел выбирается из групп Outline в верхней панели
           </p>
         </div>
