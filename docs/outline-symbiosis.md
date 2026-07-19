@@ -1,103 +1,76 @@
-# Outline + расписание
+# Интеграция Outline + Schedule
+
+Полная инструкция запуска находится в корневом [`README.md`](../README.md).
 
 ## Источник данных
 
-Outline является единственным источником пользователей и отделов:
+Outline является единственным источником личных данных:
 
-- `public.users.id` — идентификатор сотрудника;
-- `public.groups.id` — идентификатор отдела;
-- `public.group_users` — членство сотрудника в отделе;
-- `public.teams.id` — технический идентификатор единственного workspace.
+- `public.users` — пользователи;
+- `public.teams` — рабочие пространства;
+- `public.groups` и `public.group_users` — только права доступа к документам.
 
-В схеме `schedule` не хранятся ФИО, email, аватары, языки, копии пользователей, копии групп или отдельная организация.
+Сервис расписания не копирует ФИО, email, аватары и языки пользователей.
 
-Для совместимости Prisma миграции Outline создают read-only представления:
+Для совместимости Prisma схема `schedule` содержит read-only представления над данными Outline, включая `schedule.users`.
 
-- `schedule.users` → `public.users`;
-- `schedule.organizations` → `public.teams`;
-- `schedule.organization_members` → активные пользователи Outline;
-- `schedule.divisions` → `public.groups`;
-- `schedule.division_members` → `public.group_users`.
+## Подразделения расписания
 
-Представления не содержат собственных данных. Все внешние ключи рабочих таблиц направлены непосредственно в `public.users`, `public.groups` и `public.teams`.
+Подразделения расписания не являются группами доступа Outline.
 
-## Что хранится в `schedule`
+Они хранятся в собственных таблицах:
 
-Только данные, относящиеся к работе:
+- `schedule.divisions`;
+- `schedule.division_members`.
 
-- недельные графики;
-- смены и назначения;
-- выходные;
-- отпуска и больничные;
-- категории отсутствий;
-- учёт времени;
-- праздничные дни;
-- заметки к графику;
-- пул шаблонов смен;
-- одноразовые SSO-токены.
-
-Портал и весь AI-функционал удалены.
+У сотрудника может быть только одно основное подразделение. Подразделение имеет руководителя, цвет и тип графика `SHIFT` или `STABLE`.
 
 ## Миграции
 
 Единственный владелец миграций общей базы — Outline.
 
-При запуске контейнера Outline выполняется:
+При старте контейнера Outline выполняется:
 
 ```bash
 ./node_modules/.bin/sequelize db:migrate
 ```
 
-Эти миграции создают и обновляют схему `schedule`. Schichtplaner выполняет только `prisma generate` при сборке и не запускает `prisma migrate deploy`.
+Эти миграции создают и обновляют схему `schedule`. Контейнер Schedule выполняет только `prisma generate` во время сборки и не запускает `prisma migrate deploy`, `prisma migrate dev` или `prisma db push`.
 
 ## Авторизация
 
 1. Пользователь входит в Outline.
-2. Пункт «Расписание» открывает `/api/schedule.open`.
-3. Outline выдаёт HS256-токен сроком на 60 секунд.
-4. Schichtplaner проверяет подпись и отмечает `jti` использованным.
-5. Сессия содержит UUID пользователя Outline.
-6. Доступные отделы читаются из `public.group_users` при каждом запросе.
+2. Пункт «Расписание» вызывает `/api/schedule.open`.
+3. Outline создаёт одноразовый HS256 SSO-токен сроком на 60 секунд.
+4. Schedule проверяет подпись и помечает `jti` использованным.
+5. Сессия Schedule содержит UUID пользователя Outline.
+
+Прямой вход по email в Schedule отключён.
 
 ## Docker
 
-Репозитории должны располагаться рядом:
+Репозитории располагаются рядом:
 
 ```text
-project/
-├── Outline-osp/
-└── schichtplaner-qt/
+C:\OSPanel\home\
+├── outline.qt.local\
+└── schedule.qt.local\
 ```
 
-В `Outline-osp/.env` сохраняются существующие `SECRET_KEY`, `UTILS_SECRET`, настройки почты и хранилища.
+Open Server Panel не используется. Каталог `C:\OSPanel\home` является только местом хранения файлов.
 
-Запуск в Windows:
+Запуск выполняется из `schedule.qt.local`:
 
-```bat
-docker-symbiosis-up.bat
+```powershell
+.\docker-symbiosis-up.bat
 ```
 
-Проверка:
-
-```bat
-docker-symbiosis-check.bat
-```
-
-Остановка без удаления данных:
-
-```bat
-docker-symbiosis-down.bat
-```
+Docker Compose запускает Outline, Schedule, PostgreSQL, Redis и Mailpit.
 
 Сервисы:
 
 - Outline: `http://localhost:3000`;
-- расписание: `http://localhost:41873`;
-- PostgreSQL: одна база `outline`;
-- схемы: `public` и `schedule`.
-
-## Тема и язык
-
-- тема расписания хранится в браузере под отдельным ключом `schichtplaner-theme` и не связана с темой Outline;
-- язык расписания выбирается в персональных настройках и хранится локально;
-- личные поля пользователя в БД расписания не создаются.
+- Schedule: `http://localhost:41873`;
+- Mailpit: `http://localhost:8025`;
+- PostgreSQL: одна внутренняя Docker-база `outline`;
+- схемы PostgreSQL: `public` и `schedule`.

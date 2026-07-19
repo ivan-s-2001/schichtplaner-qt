@@ -8,6 +8,13 @@ if not exist ".env.symbiosis" (
   exit /b 1
 )
 
+set "OUTLINE_PORT=3000"
+set "SCHEDULE_PORT=41873"
+set "MAILPIT_PORT=8025"
+for /f "usebackq eol=# tokens=1,* delims==" %%A in (".env.symbiosis") do (
+  if not "%%A"=="" set "%%A=%%B"
+)
+
 echo Checking Docker services...
 docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml ps
 if errorlevel 1 goto :fail
@@ -26,9 +33,15 @@ if /I not "%USERS_KIND%"=="v" (
   goto :fail
 )
 
-for /f "usebackq delims=" %%F in (`docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml exec -T postgres psql -U outline -d outline -Atc "SELECT COUNT(*) FROM pg_constraint c JOIN pg_class r ON r.oid=c.conrelid JOIN pg_namespace n ON n.oid=r.relnamespace JOIN pg_class f ON f.oid=c.confrelid JOIN pg_namespace fn ON fn.oid=f.relnamespace WHERE n.nspname='schedule' AND fn.nspname='public' AND f.relname IN ('users','groups','teams');"`) do set "DIRECT_FKS=%%F"
+for /f "usebackq delims=" %%D in (`docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml exec -T postgres psql -U outline -d outline -Atc "SELECT c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='schedule' AND c.relname='divisions';"`) do set "DIVISIONS_KIND=%%D"
+if /I not "%DIVISIONS_KIND%"=="r" (
+  echo ERROR: schedule.divisions must be an independent table, received relkind: %DIVISIONS_KIND%
+  goto :fail
+)
+
+for /f "usebackq delims=" %%F in (`docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml exec -T postgres psql -U outline -d outline -Atc "SELECT COUNT(*) FROM pg_constraint c JOIN pg_class r ON r.oid=c.conrelid JOIN pg_namespace n ON n.oid=r.relnamespace JOIN pg_class f ON f.oid=c.confrelid JOIN pg_namespace fn ON fn.oid=f.relnamespace WHERE n.nspname='schedule' AND fn.nspname='public' AND f.relname IN ('users','teams');"`) do set "DIRECT_FKS=%%F"
 if "%DIRECT_FKS%"=="0" (
-  echo ERROR: no direct foreign keys from schedule to Outline tables were found.
+  echo ERROR: no direct foreign keys from schedule to Outline users or teams were found.
   goto :fail
 )
 
@@ -37,16 +50,21 @@ echo Direct Outline foreign keys: %DIRECT_FKS%
 
 echo.
 echo Checking Outline health...
-powershell -NoProfile -Command "$response = Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:3000/_health' -TimeoutSec 10; if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 400) { exit 1 }"
+powershell -NoProfile -Command "$response = Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:%OUTLINE_PORT%/_health' -TimeoutSec 10; if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 400) { exit 1 }"
 if errorlevel 1 goto :fail
 
 echo Checking Schedule HTTP response...
-powershell -NoProfile -Command "$response = Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:41873/' -TimeoutSec 10; if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 400) { exit 1 }"
+powershell -NoProfile -Command "$response = Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:%SCHEDULE_PORT%/' -TimeoutSec 10; if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 400) { exit 1 }"
+if errorlevel 1 goto :fail
+
+echo Checking Mailpit HTTP response...
+powershell -NoProfile -Command "$response = Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:%MAILPIT_PORT%/' -TimeoutSec 10; if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 400) { exit 1 }"
 if errorlevel 1 goto :fail
 
 echo.
 echo ============================================================
 echo CHECK PASSED
+echo Docker-only installation
 echo One PostgreSQL database: outline
 echo Outline data: public
 echo Schedule-only data: schedule

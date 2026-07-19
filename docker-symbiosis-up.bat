@@ -4,28 +4,37 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 if not exist ".env.symbiosis" (
-  echo Creating .env.symbiosis with random scheduling secrets...
+  echo Creating Docker .env.symbiosis with random secrets...
   powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\create-symbiosis-env.ps1"
   if errorlevel 1 goto :fail
 )
 
-if not exist "..\Outline-osp\package.json" (
-  echo ERROR: Outline-osp must be next to schichtplaner-qt.
-  echo Expected: %CD%\..\Outline-osp
+if not exist "..\outline.qt.local\package.json" (
+  echo ERROR: Outline repository was not found.
+  echo Expected path: C:\OSPanel\home\outline.qt.local
+  echo Clone it with:
+  echo git clone https://github.com/ivan-s-2001/Outline-osp.git C:\OSPanel\home\outline.qt.local
   goto :fail
 )
 
-if not exist "..\Outline-osp\.env" (
-  echo ERROR: ..\Outline-osp\.env is missing.
-  echo Keep the existing Outline SECRET_KEY and UTILS_SECRET in that file.
-  goto :fail
+if not exist "..\outline.qt.local\.env" (
+  echo Creating Outline .env for Docker...
+  powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\create-outline-env.ps1"
+  if errorlevel 1 goto :fail
 )
 
-echo Building and starting Outline + Schedule...
+set "OUTLINE_PORT=3000"
+set "SCHEDULE_PORT=41873"
+set "MAILPIT_PORT=8025"
+for /f "usebackq eol=# tokens=1,* delims==" %%A in (".env.symbiosis") do (
+  if not "%%A"=="" set "%%A=%%B"
+)
+
+echo Building and starting the Docker stack...
 docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml up -d --build
 if errorlevel 1 goto :fail
 
-echo Waiting for Outline migrations and both applications...
+echo Waiting for migrations and application health checks...
 set "READY=0"
 for /L %%I in (1,1,120) do (
   call docker-symbiosis-check.bat >nul 2>&1
@@ -39,7 +48,7 @@ for /L %%I in (1,1,120) do (
 :ready
 if not "!READY!"=="1" (
   docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml ps
-  docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml logs --tail=150 outline schedule postgres
+  docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml logs --tail=150 outline schedule postgres redis mailpit
   goto :fail
 )
 
@@ -47,13 +56,19 @@ call docker-symbiosis-check.bat
 if errorlevel 1 goto :fail
 
 echo.
-echo Outline: http://localhost:3000
-echo Schedule: http://localhost:41873
-echo Open the schedule through the Outline sidebar.
-start "" "http://localhost:3000"
+echo Outline:  http://localhost:!OUTLINE_PORT!
+echo Schedule: http://localhost:!SCHEDULE_PORT!
+echo Mailpit:  http://localhost:!MAILPIT_PORT!
+echo.
+echo The C:\OSPanel\home folder is used only as a storage location.
+echo Open Server is not required and is not used.
+echo Sign in to Outline by email, then open the login message in Mailpit.
+echo Open Schedule through the Outline sidebar.
+start "" "http://localhost:!OUTLINE_PORT!"
 exit /b 0
 
 :fail
-echo Shared Docker stack failed to start.
+echo.
+echo Docker stack failed to start.
 pause
 exit /b 1

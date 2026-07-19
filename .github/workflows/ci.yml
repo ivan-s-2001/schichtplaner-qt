@@ -21,6 +21,14 @@ jobs:
       ALLOW_EMAIL_LOGIN: "false"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate Docker Compose configuration
+        run: |
+          mkdir -p ../outline.qt.local
+          touch ../outline.qt.local/.env
+          cp .env.symbiosis.example .env.symbiosis
+          docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml config >/dev/null
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20

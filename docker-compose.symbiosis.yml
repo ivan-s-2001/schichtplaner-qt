@@ -1,4 +1,4 @@
-name: outline-schichtplaner
+name: outline-schedule
 
 services:
   postgres:
@@ -7,8 +7,6 @@ services:
       POSTGRES_USER: outline
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-outline}
       POSTGRES_DB: outline
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - shared_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -29,12 +27,18 @@ services:
       retries: 20
     restart: unless-stopped
 
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "${MAILPIT_PORT:-8025}:8025"
+    restart: unless-stopped
+
   outline:
     build:
-      context: ../Outline-osp
+      context: ../outline.qt.local
       dockerfile: Dockerfile.symbiosis
     env_file:
-      - ../Outline-osp/.env
+      - ../outline.qt.local/.env
       - ./.env.symbiosis
     environment:
       NODE_ENV: production
@@ -48,11 +52,18 @@ services:
       FORCE_HTTPS: "false"
       SCHEDULE_URL: ${SCHEDULE_URL:-http://localhost:41873}
       SCHEDULE_SSO_SECRET: ${SCHEDULE_SSO_SECRET}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_SECURE: "false"
+      SMTP_FROM_EMAIL: "Outline <outline@local.test>"
+      SMTP_REPLY_EMAIL: "Outline <outline@local.test>"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     ports:
       - "${OUTLINE_PORT:-3000}:3000"
     volumes:
