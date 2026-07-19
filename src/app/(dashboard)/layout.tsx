@@ -15,8 +15,9 @@ export default function DashboardLayout({
     <SessionProvider>
       <ThemeProvider
         attribute="class"
-        defaultTheme="system"
-        enableSystem
+        storageKey="schichtplaner-theme"
+        defaultTheme="light"
+        enableSystem={false}
         disableTransitionOnChange
       >
         <QueryProvider>
