@@ -1,6 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { CalendarHeart, ClipboardPenLine } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useCurrentMember } from "@/lib/hooks/use-current-member";
 import { EmployeeGridWrapper } from "./employee-grid-wrapper";
 import { ShiftLegend } from "./shift-legend";
 import { StableScheduleGrid } from "./stable-schedule-grid";
@@ -35,6 +39,7 @@ export function DivisionScheduleView({
   year: number;
   weekDateStrings: string[];
 }) {
+  const { data: currentMember } = useCurrentMember();
   const { data, isLoading, error } = useQuery<DivisionsResponse>({
     queryKey: ["outline-divisions"],
     queryFn: async () => {
@@ -70,24 +75,50 @@ export function DivisionScheduleView({
 
   const division = data.selected;
   const isStable = division.scheduleMode === "STABLE";
+  const canManage =
+    currentMember?.role === "OWNER" ||
+    currentMember?.role === "ADMIN" ||
+    division.isManager;
+  const canSubmitPreferences = division.isPrimary || canManage;
 
   return (
     <div className="schedule-equal-day-columns space-y-5">
       <header className="space-y-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-[26px] font-medium leading-tight text-foreground">
-              График: {division.title}
-            </h1>
-            <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-              {isStable ? "Стабильный личный" : "Сменный"}
-            </span>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[26px] font-medium leading-tight text-foreground">
+                График: {division.title}
+              </h1>
+              <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                {isStable ? "Стабильный личный" : "Сменный"}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {isStable
+                ? "Личные повторяющиеся графики, нормы и баланс рабочего времени"
+                : "Недельная таблица смен; сотрудники самостоятельно меняют своё участие"}
+            </p>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {isStable
-              ? "Личные повторяющиеся графики, нормы и баланс рабочего времени"
-              : "Недельная таблица смен; сотрудники самостоятельно меняют своё участие"}
-          </p>
+
+          {!isStable && (
+            <div className="flex flex-wrap gap-2">
+              {canSubmitPreferences && (
+                <Button asChild variant="outline">
+                  <Link href="/schedule/preferences">
+                    <CalendarHeart /> Пожелания на следующий месяц
+                  </Link>
+                </Button>
+              )}
+              {canManage && (
+                <Button asChild>
+                  <Link href="/schedule/planning">
+                    <ClipboardPenLine /> Планирование следующего месяца
+                  </Link>
+                </Button>
+              )}
+            </div>
+          )}
         </div>
         {!isStable && <ViewSwitcher kw={kw} />}
       </header>
