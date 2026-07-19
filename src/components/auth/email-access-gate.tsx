@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSession, signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Loader2, LockKeyhole } from "lucide-react";
+import { LockKeyhole } from "lucide-react";
 
 interface EmailAccessGateProps {
   userId: string | null;
@@ -95,22 +95,26 @@ export function EmailAccessGate({
 
   if (state === "checking") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
-        <div className="flex items-center gap-3 rounded-lg border bg-card px-5 py-4 text-sm text-muted-foreground shadow-sm">
-          <Loader2 className="size-5 animate-spin" />
-          {mode === "vacations" ? "Открываем отпуска…" : "Открываем график…"}
+      <main
+        aria-label={mode === "vacations" ? "Открываем отпуска" : "Открываем график"}
+        className="min-h-screen bg-background text-foreground"
+      >
+        <div className="h-0.5 w-full overflow-hidden bg-muted">
+          <div className="h-full w-1/3 animate-[outline-loading_1.1s_ease-in-out_infinite] bg-primary" />
         </div>
       </main>
     );
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
-      <section className="w-full max-w-md rounded-xl border bg-card p-8 text-center shadow-sm">
-        <LockKeyhole className="mx-auto size-10 text-destructive" />
-        <h1 className="mt-4 text-2xl font-bold">Доступ заблокирован</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Откройте нужный раздел через Outline.
+    <main className="min-h-screen bg-background px-4 py-16 text-foreground md:px-11">
+      <section className="mx-auto w-full max-w-3xl">
+        <LockKeyhole className="size-6 text-muted-foreground" strokeWidth={1.7} />
+        <h1 className="mt-5 text-3xl font-semibold tracking-tight">
+          Доступ к разделу закрыт
+        </h1>
+        <p className="mt-3 max-w-xl text-base text-muted-foreground">
+          Откройте «График» или «Отпуска» через блок «Гриф» в Outline.
         </p>
       </section>
     </main>
