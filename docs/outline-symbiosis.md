@@ -27,23 +27,31 @@ The Compose file is started from `schichtplaner-qt` and builds Outline from `../
 
 ## First start on Windows
 
-1. Keep the working Outline authentication configuration in `Outline-osp/.env`.
-2. Run `docker-symbiosis-up.bat`.
-3. Open `http://localhost:3000`.
-4. Sign in to Outline.
-5. Click **Расписание** in the Outline sidebar.
+1. Keep the working Outline configuration in `Outline-osp/.env`.
+2. Do not change or copy its existing `SECRET_KEY` and `UTILS_SECRET`.
+3. Run `docker-symbiosis-up.bat`.
+4. The script builds, starts, waits for, and verifies the shared stack.
+5. Sign in to Outline at `http://localhost:3000`.
+6. Click **Расписание** in the Outline sidebar.
 
-The batch file creates `.env.symbiosis` with random local secrets when it does not exist.
+The batch file creates `.env.symbiosis` only for scheduling-specific secrets when it does not exist. It never regenerates the Outline encryption secrets.
+
+Run `docker-symbiosis-check.bat` at any time to verify:
+
+- both HTTP applications respond;
+- the PostgreSQL database is named `outline`;
+- schemas `public` and `schedule` exist in that same database.
 
 ## SSO flow
 
 1. `/api/schedule.open` checks the current Outline session.
 2. Outline issues an HS256 token valid for 60 seconds.
 3. The browser is redirected to Schichtplaner.
-4. Schichtplaner validates the token.
-5. Schichtplaner reads the user, workspace, groups, and group memberships from `public`.
-6. Local scheduling records and link records are synchronized in `schedule`.
-7. A normal Schichtplaner session is created.
+4. Schichtplaner validates and consumes the token.
+5. The same token identifier cannot be used a second time.
+6. Schichtplaner reads the user, workspace, groups, and group memberships from `public`.
+7. Local scheduling records and link records are synchronized in `schedule`.
+8. A normal Schichtplaner session is created.
 
 Passwords and Outline session cookies are not copied into Schichtplaner.
 
@@ -56,6 +64,7 @@ Switching a department changes:
 - the employee list;
 - visible shifts;
 - absences and days off shown in the weekly schedule;
+- shift assignments and cell editing permissions;
 - the department assigned to newly created shifts.
 
 Outline administrators receive access to every active group in their workspace. Other users receive access only to groups in which they are members.
@@ -68,19 +77,34 @@ Outline:
 postgresql://outline:<password>@postgres:5432/outline
 ```
 
-Schichtplaner:
+Schichtplaner migration URL:
 
 ```text
 postgresql://outline:<password>@postgres:5432/outline?schema=schedule
 ```
 
-Both URLs point to the same database. The `schema=schedule` parameter changes only Schichtplaner's PostgreSQL search path.
+At runtime Prisma removes the Prisma-specific `schema` query parameter before passing the URL to node-postgres and explicitly configures `PrismaPg` with the `schedule` schema.
+
+## Existing data
+
+The Compose stack preserves data in Docker volumes when stopped normally.
+
+```powershell
+docker-symbiosis-down.bat
+```
+
+This does not delete PostgreSQL data.
+
+A previous standalone Outline or Schichtplaner database is not copied automatically into a new Docker volume. Back it up before switching. Existing Schichtplaner data may be restored into the `schedule` schema or recreated with the repository import scripts.
 
 ## Useful commands
 
 ```powershell
-# Start and rebuild
-docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml up -d --build
+# One-click start, build, wait, and smoke check
+docker-symbiosis-up.bat
+
+# Re-run the smoke check
+docker-symbiosis-check.bat
 
 # View services
 docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml ps
@@ -89,7 +113,7 @@ docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml ps
 docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml logs -f outline schedule
 
 # Stop without deleting data
-docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml down
+docker-symbiosis-down.bat
 
 # Delete the shared database and all local Docker data
 docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml down -v
