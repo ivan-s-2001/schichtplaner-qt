@@ -1,17 +1,19 @@
 [data-outline-native-shell] h1 {
-  font-size: 1.75rem !important;
-  font-weight: 600 !important;
-  letter-spacing: -0.025em !important;
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
-[data-outline-native-shell] h2,
+[data-outline-native-shell] h2 {
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
 [data-outline-native-shell] h3 {
-  font-weight: 600 !important;
-  letter-spacing: -0.015em !important;
-}
-
-[data-outline-native-shell] [data-slot="card"]:hover {
-  box-shadow: none !important;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 [data-outline-native-shell] table {
@@ -19,7 +21,8 @@
 }
 
 [data-outline-native-shell] th {
-  font-weight: 600;
+  color: var(--outline-text-secondary);
+  font-weight: 500;
 }
 
 [data-outline-native-shell] input,
@@ -31,6 +34,6 @@
 
 @media (max-width: 640px) {
   [data-outline-native-shell] h1 {
-    font-size: 1.5rem !important;
+    font-size: 24px;
   }
 }
