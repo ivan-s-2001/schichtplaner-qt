@@ -4,10 +4,17 @@ type HomePageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+function first(value: string | string[] | undefined): string | null {
+  return Array.isArray(value) ? value[0] ?? null : value ?? null;
+}
+
 export default async function HomePage({ searchParams }: HomePageProps) {
   const params = await searchParams;
-  const rawEmail = params.email;
-  const email = Array.isArray(rawEmail) ? rawEmail[0] ?? null : rawEmail ?? null;
 
-  return <EmailAccessGate email={email} />;
+  return (
+    <EmailAccessGate
+      token={first(params.token)}
+      email={first(params.email)}
+    />
+  );
 }
