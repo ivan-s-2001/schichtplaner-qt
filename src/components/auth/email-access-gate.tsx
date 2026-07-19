@@ -11,9 +11,21 @@ interface EmailAccessGateProps {
   signature: string | null;
   token: string | null;
   email: string | null;
+  returnTo: string | null;
 }
 
 type AccessState = "checking" | "blocked";
+
+const allowedDestinations = new Set([
+  "/schedule/employee",
+  "/employees/absences",
+]);
+
+function safeDestination(value: string | null) {
+  return value && allowedDestinations.has(value)
+    ? value
+    : "/schedule/employee";
+}
 
 export function EmailAccessGate({
   userId,
@@ -21,6 +33,7 @@ export function EmailAccessGate({
   signature,
   token,
   email,
+  returnTo,
 }: EmailAccessGateProps) {
   const router = useRouter();
   const [state, setState] = useState<AccessState>("checking");
@@ -56,7 +69,7 @@ export function EmailAccessGate({
       document.cookie =
         "schedule-embedded=; Path=/; Max-Age=0; SameSite=Lax";
 
-      router.replace("/schedule/employee");
+      router.replace(safeDestination(returnTo));
       router.refresh();
     }
 
@@ -67,7 +80,7 @@ export function EmailAccessGate({
     return () => {
       cancelled = true;
     };
-  }, [email, router, signature, teamId, token, userId]);
+  }, [email, returnTo, router, signature, teamId, token, userId]);
 
   if (state === "checking") {
     return (
