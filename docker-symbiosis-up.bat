@@ -3,6 +3,27 @@ chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
+if /I "%~1"=="--offline" goto :after_git_pull
+
+if /I not "%~1"=="--skip-git-pull" (
+  echo Updating repositories before Docker build...
+  call "%~dp0gitpull.bat"
+  if errorlevel 1 (
+    echo.
+    echo Automatic repository update failed.
+    echo To start the existing local version without Git update, run:
+    echo docker-symbiosis-up.bat --offline
+    pause
+    exit /b 1
+  )
+
+  echo.
+  echo Restarting the updated startup script...
+  call "%~f0" --skip-git-pull
+  exit /b !errorlevel!
+)
+
+:after_git_pull
 if not exist ".env.symbiosis" (
   echo Creating Docker .env.symbiosis with random secrets...
   powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\create-symbiosis-env.ps1"
