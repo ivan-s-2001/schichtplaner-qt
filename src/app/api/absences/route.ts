@@ -2,61 +2,62 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
+import { getSelectedDivision } from "@/lib/selected-division";
 import { startOfMonth, endOfMonth, parse } from "date-fns";
 
-// GET /api/absences - List absences for the org
 export async function GET(request: NextRequest) {
   const member = await getCurrentMember();
   if (!member) {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   }
 
-  const { searchParams } = request.nextUrl;
-  const monthParam = searchParams.get("month"); // e.g. "2026-03"
-  const yearParam = searchParams.get("year"); // e.g. "2026"
-  const userIdParam = searchParams.get("userId");
-  const statusParam = searchParams.get("status"); // PENDING, APPROVED, DECLINED
+  const selectedDivision = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+  if (!selectedDivision) {
+    return NextResponse.json({ error: "Нет доступного отдела" }, { status: 403 });
+  }
 
-  // Get all org members
-  const orgMembers = await db.organizationMember.findMany({
-    where: { organizationId: member.organizationId, isActive: true },
+  const { searchParams } = request.nextUrl;
+  const monthParam = searchParams.get("month");
+  const yearParam = searchParams.get("year");
+  const userIdParam = searchParams.get("userId");
+  const statusParam = searchParams.get("status");
+
+  const divisionMembers = await db.divisionMember.findMany({
+    where: { divisionId: selectedDivision.id },
     select: { userId: true },
   });
-  const orgUserIds = orgMembers.map((m) => m.userId);
+  const divisionUserIds = divisionMembers.map((item) => item.userId);
 
-  // Build where clause
   const where: Record<string, unknown> = {
-    userId: { in: orgUserIds },
+    userId: { in: divisionUserIds },
   };
 
-  // Date range filter
   if (yearParam) {
     const year = parseInt(yearParam, 10);
-    if (!isNaN(year)) {
+    if (!Number.isNaN(year)) {
       where.dateFrom = { lte: new Date(`${year}-12-31`) };
       where.dateTo = { gte: new Date(`${year}-01-01`) };
     }
   } else if (monthParam) {
     const parsed = parse(monthParam, "yyyy-MM", new Date());
-    if (!isNaN(parsed.getTime())) {
-      const monthStart = startOfMonth(parsed);
-      const monthEnd = endOfMonth(parsed);
-      where.dateFrom = { lte: monthEnd };
-      where.dateTo = { gte: monthStart };
+    if (!Number.isNaN(parsed.getTime())) {
+      where.dateFrom = { lte: endOfMonth(parsed) };
+      where.dateTo = { gte: startOfMonth(parsed) };
     }
   }
 
-  // User filter
-  if (userIdParam && orgUserIds.includes(userIdParam)) {
+  if (userIdParam && divisionUserIds.includes(userIdParam)) {
     where.userId = userIdParam;
   }
 
-  // Status filter
   if (statusParam && ["PENDING", "APPROVED", "DECLINED"].includes(statusParam)) {
     where.status = statusParam;
   }
 
-  // Employees can only see their own absences
   const isAdmin = isAdminOrAbove(member.role);
   if (!isAdmin) {
     where.userId = member.user.id;
@@ -85,30 +86,28 @@ export async function GET(request: NextRequest) {
     orderBy: { dateFrom: "asc" },
   });
 
-  // Get counts by status
   const allAbsences = await db.absence.findMany({
     where: {
-      userId: isAdmin ? { in: orgUserIds } : member.user.id,
+      userId: isAdmin ? { in: divisionUserIds } : member.user.id,
     },
     select: { status: true },
   });
 
   const counts = {
     all: allAbsences.length,
-    pending: allAbsences.filter((a) => a.status === "PENDING").length,
-    approved: allAbsences.filter((a) => a.status === "APPROVED").length,
-    declined: allAbsences.filter((a) => a.status === "DECLINED").length,
+    pending: allAbsences.filter((item) => item.status === "PENDING").length,
+    approved: allAbsences.filter((item) => item.status === "APPROVED").length,
+    declined: allAbsences.filter((item) => item.status === "DECLINED").length,
   };
 
-  return NextResponse.json({ absences, counts });
+  return NextResponse.json({ division: selectedDivision, absences, counts });
 }
 
-// POST /api/absences - Create absence request
 const createAbsenceSchema = z.object({
   userId: z.string().min(1),
   categoryId: z.string().min(1),
-  dateFrom: z.string().min(1), // "2026-03-15"
-  dateTo: z.string().min(1), // "2026-03-20"
+  dateFrom: z.string().min(1),
+  dateTo: z.string().min(1),
   note: z.string().optional(),
   status: z.enum(["PENDING", "APPROVED"]).optional(),
 });
@@ -117,6 +116,15 @@ export async function POST(request: NextRequest) {
   const member = await getCurrentMember();
   if (!member) {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+  }
+
+  const selectedDivision = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+  if (!selectedDivision) {
+    return NextResponse.json({ error: "Нет доступного отдела" }, { status: 403 });
   }
 
   let body: unknown;
@@ -135,32 +143,26 @@ export async function POST(request: NextRequest) {
   }
 
   const data = parsed.data;
-
-  // Permission check: employees can only create for themselves
   const isAdmin = isAdminOrAbove(member.role);
   if (!isAdmin && data.userId !== member.user.id) {
     return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
   }
 
-  // Employees always create as PENDING, admins can create as APPROVED
-  const status = isAdmin && data.status === "APPROVED" ? "APPROVED" : "PENDING";
-
-  // Verify user is in the org
-  const targetMember = await db.organizationMember.findFirst({
+  const targetDivisionMember = await db.divisionMember.findUnique({
     where: {
-      organizationId: member.organizationId,
-      userId: data.userId,
-      isActive: true,
+      divisionId_userId: {
+        divisionId: selectedDivision.id,
+        userId: data.userId,
+      },
     },
   });
-  if (!targetMember) {
+  if (!targetDivisionMember) {
     return NextResponse.json(
-      { error: "User not found in organization" },
+      { error: "Сотрудник не состоит в выбранном отделе" },
       { status: 404 }
     );
   }
 
-  // Verify category belongs to org
   const category = await db.absenceCategory.findFirst({
     where: {
       id: data.categoryId,
@@ -168,28 +170,22 @@ export async function POST(request: NextRequest) {
     },
   });
   if (!category) {
-    return NextResponse.json(
-      { error: "Category not found" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Категория не найдена" }, { status: 404 });
   }
 
-  // Validate date range
-  const dateFrom = new Date(data.dateFrom + "T00:00:00.000Z");
-  const dateTo = new Date(data.dateTo + "T00:00:00.000Z");
-  if (isNaN(dateFrom.getTime()) || isNaN(dateTo.getTime())) {
-    return NextResponse.json(
-      { error: "Invalid date format" },
-      { status: 400 }
-    );
+  const dateFrom = new Date(`${data.dateFrom}T00:00:00.000Z`);
+  const dateTo = new Date(`${data.dateTo}T00:00:00.000Z`);
+  if (Number.isNaN(dateFrom.getTime()) || Number.isNaN(dateTo.getTime())) {
+    return NextResponse.json({ error: "Некорректная дата" }, { status: 400 });
   }
   if (dateFrom > dateTo) {
     return NextResponse.json(
-      { error: "dateFrom must be before or equal to dateTo" },
+      { error: "Начальная дата должна быть раньше конечной" },
       { status: 400 }
     );
   }
 
+  const status = isAdmin && data.status === "APPROVED" ? "APPROVED" : "PENDING";
   const absence = await db.absence.create({
     data: {
       userId: data.userId,
