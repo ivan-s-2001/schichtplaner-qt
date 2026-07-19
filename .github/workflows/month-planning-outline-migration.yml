@@ -40,12 +40,14 @@ jobs:
       - name: Checkout Schedule
         uses: actions/checkout@v4
 
-      - name: Checkout Outline migration branch
-        uses: actions/checkout@v4
-        with:
-          repository: ivan-s-2001/Outline-osp
-          ref: feature/month-planning-schema
-          path: _outline
+      - name: Download public Outline migration branch
+        run: |
+          curl --fail --location --silent --show-error \
+            https://codeload.github.com/ivan-s-2001/Outline-osp/tar.gz/refs/heads/feature/month-planning-schema \
+            --output /tmp/outline.tar.gz
+          mkdir _outline
+          tar -xzf /tmp/outline.tar.gz --strip-components=1 -C _outline
+          test -f _outline/server/migrations/20260719128000-create-month-planning.js
 
       - name: Install PostgreSQL client
         run: |
