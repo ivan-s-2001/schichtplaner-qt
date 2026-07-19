@@ -8,6 +8,7 @@ import {
   verifyOutlineToken,
 } from "@/lib/outline-integration";
 import { consumeOutlineSsoToken } from "@/lib/outline-sso-token";
+import { syncOutlineWorkspace } from "@/lib/outline-workspace-sync";
 
 const ADMIN_EMAIL = "admin@qksr.ru";
 
@@ -39,6 +40,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             const payload = verifyOutlineToken(token);
             await consumeOutlineSsoToken(payload);
             const membership = await syncOutlineUser(payload);
+            await syncOutlineWorkspace(
+              payload.teamId,
+              membership.organizationId
+            );
 
             return {
               id: membership.user.id,
