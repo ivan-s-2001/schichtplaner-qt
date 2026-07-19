@@ -6,6 +6,14 @@ import "./globals.css";
 import "./outline-native.css";
 import "./schedule-editors.css";
 
+function externalOrigin(value: string | undefined, fallback: string): string {
+  try {
+    return new URL(value || fallback).origin;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("meta");
   const title = t("title");
@@ -18,7 +26,7 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     description,
     metadataBase: new URL(
-      process.env.APP_URL || "http://localhost:41873"
+      process.env.APP_URL || "https://schedule.qt.local"
     ),
     openGraph: {
       title,
@@ -35,11 +43,15 @@ export default async function RootLayout({
 }>) {
   const locale = await getLocale();
   const messages = await getMessages();
+  const outlineOrigin = externalOrigin(
+    process.env.OUTLINE_URL,
+    "https://outline.qt.local"
+  );
 
   return (
     <html lang={locale} suppressHydrationWarning>
       <body>
-        <OutlineThemeBridge />
+        <OutlineThemeBridge outlineOrigin={outlineOrigin} />
         <NextIntlClientProvider locale={locale} messages={messages}>
           {children}
         </NextIntlClientProvider>
