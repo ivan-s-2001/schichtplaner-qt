@@ -45,3 +45,15 @@ CREATE TABLE IF NOT EXISTS "outline_group_links" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "outline_group_links_outlineGroupId_key"
     ON "outline_group_links"("outlineGroupId");
+
+-- Prevents a copied SSO URL from being reused during its short validity window.
+CREATE TABLE IF NOT EXISTS "outline_sso_tokens" (
+    "jti" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "consumedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "outline_sso_tokens_pkey" PRIMARY KEY ("jti")
+);
+
+CREATE INDEX IF NOT EXISTS "outline_sso_tokens_expiresAt_idx"
+    ON "outline_sso_tokens"("expiresAt");
