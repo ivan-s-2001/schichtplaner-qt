@@ -27,8 +27,7 @@ export async function GET() {
 export async function POST() {
   return NextResponse.json(
     {
-      error:
-        "Отделы создаются как группы Outline. Создайте или измените группу в Outline.",
+      error: "Подразделения создаются администратором в настройках Outline.",
     },
     { status: 409 }
   );
