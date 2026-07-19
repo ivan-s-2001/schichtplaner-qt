@@ -4,7 +4,7 @@ import { getCurrentMember } from "@/lib/auth-helpers";
 import {
   getOutlineDivisions,
   resolveOutlineDivision,
-} from "@/lib/outline-integration";
+} from "@/lib/outline-division-access";
 
 const COOKIE_NAME = "scheduleDivisionId";
 const selectSchema = z.object({
