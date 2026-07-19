@@ -1,6 +1,0 @@
-- [ ] TypeScript passes
-- [ ] Production build passes
-- [ ] Manager can edit only selected managed division
-- [ ] Employee sees only own vacation row
-- [ ] Four weekend days in a fourteen-day range do not consume allowance
-- [ ] Vacation cannot be created from a schedule cell
