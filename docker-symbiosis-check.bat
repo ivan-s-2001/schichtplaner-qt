@@ -20,6 +20,11 @@ docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml ps
 if errorlevel 1 goto :fail
 
 echo.
+echo Checking Schedule authentication configuration...
+docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml exec -T schedule node -e "if (!process.env.AUTH_SECRET) { console.error('AUTH_SECRET is missing'); process.exit(1); }"
+if errorlevel 1 goto :fail
+
+echo.
 echo Checking the shared PostgreSQL database...
 for /f "usebackq delims=" %%S in (`docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml exec -T postgres psql -U outline -d outline -Atc "SELECT string_agg(schema_name, ', ' ORDER BY schema_name) FROM information_schema.schemata WHERE schema_name IN ('public', 'schedule');"`) do set "SCHEMAS=%%S"
 if /I not "%SCHEMAS%"=="public, schedule" (
