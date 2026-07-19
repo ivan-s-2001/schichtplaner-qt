@@ -4,15 +4,21 @@
   "private": true,
   "description": "Internal React UI framework based on the visual language and component geometry of Outline.",
   "sideEffects": [
-    "./src/styles.css"
+    "./src/styles.css",
+    "./src/components.css"
   ],
   "exports": {
     ".": "./src/index.ts",
     "./styles.css": "./src/styles.css",
+    "./components.css": "./src/components.css",
     "./tokens": "./src/tokens.ts"
   },
   "peerDependencies": {
+    "clsx": ">=2",
+    "lucide-react": ">=0.500",
+    "radix-ui": ">=1",
     "react": ">=19",
-    "react-dom": ">=19"
+    "react-dom": ">=19",
+    "tailwind-merge": ">=3"
   }
 }
