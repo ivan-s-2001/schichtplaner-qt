@@ -19,7 +19,7 @@ export const navItems = [
   { key: "time", icon: Clock, href: "/time" },
   { key: "employees", icon: Users, href: "/employees" },
   { key: "reporting", icon: BarChart3, href: "/reporting" },
-  { key: "settings", icon: Settings, href: "/settings" },
+  { key: "settings", icon: Settings, href: "/settings/interface" },
 ] as const;
 
 export function TopNav() {
