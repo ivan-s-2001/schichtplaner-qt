@@ -11,7 +11,6 @@ interface EmailAccessGateProps {
   signature: string | null;
   token: string | null;
   email: string | null;
-  embedded: boolean;
 }
 
 type AccessState = "checking" | "blocked";
@@ -22,7 +21,6 @@ export function EmailAccessGate({
   signature,
   token,
   email,
-  embedded,
 }: EmailAccessGateProps) {
   const router = useRouter();
   const [state, setState] = useState<AccessState>("checking");
@@ -55,9 +53,8 @@ export function EmailAccessGate({
         return;
       }
 
-      document.cookie = embedded
-        ? "schedule-embedded=1; Path=/; Max-Age=2592000; SameSite=Lax"
-        : "schedule-embedded=; Path=/; Max-Age=0; SameSite=Lax";
+      document.cookie =
+        "schedule-embedded=; Path=/; Max-Age=0; SameSite=Lax";
 
       router.replace("/schedule/employee");
       router.refresh();
@@ -70,7 +67,7 @@ export function EmailAccessGate({
     return () => {
       cancelled = true;
     };
-  }, [email, embedded, router, signature, teamId, token, userId]);
+  }, [email, router, signature, teamId, token, userId]);
 
   if (state === "checking") {
     return (
@@ -89,7 +86,7 @@ export function EmailAccessGate({
         <LockKeyhole className="mx-auto size-10 text-destructive" />
         <h1 className="mt-4 text-2xl font-bold">Доступ заблокирован</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Откройте расписание через пункт «Расписание» в Outline.
+          Откройте проект графика работы через Outline.
         </p>
       </section>
     </main>
