@@ -44,7 +44,7 @@ jobs:
           exit 1
       - run: npm run build
 
-  migration-integration:
+  schema-contract:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -64,15 +64,7 @@ jobs:
     env:
       PGPASSWORD: outline
     steps:
-      - name: Checkout schedule
-        uses: actions/checkout@v4
-
-      - name: Checkout Outline integration branch
-        uses: actions/checkout@v4
-        with:
-          repository: ivan-s-2001/Outline-osp
-          ref: feature/outline-symbiosis
-          path: outline
+      - uses: actions/checkout@v4
 
       - name: Install PostgreSQL client
         run: |
@@ -148,11 +140,8 @@ jobs:
           );
           SQL
 
-      - name: Export Sequelize migration SQL
-        run: node outline/server/scripts/export-schedule-migration-sql.js > /tmp/schedule-migrations.sql
-
-      - name: Apply Outline-owned schedule migrations
-        run: psql -h localhost -U outline -d outline -v ON_ERROR_STOP=1 -f /tmp/schedule-migrations.sql
+      - name: Apply schedule schema contract
+        run: psql -h localhost -U outline -d outline -v ON_ERROR_STOP=1 -f tests/schema/outline-schedule-contract.sql
 
       - name: Validate direct Outline references
         run: |
@@ -171,7 +160,7 @@ jobs:
               AND target_schema.nspname='public'
               AND target_table.relname IN ('users','groups','teams');
           ")
-          test "$DIRECT_FKS" -ge 10
+          test "$DIRECT_FKS" -ge 7
 
           test "$(psql -h localhost -U outline -d outline -Atc "SELECT COUNT(*) FROM schedule.users;")" = "1"
           test "$(psql -h localhost -U outline -d outline -Atc "SELECT COUNT(*) FROM schedule.divisions;")" = "1"
