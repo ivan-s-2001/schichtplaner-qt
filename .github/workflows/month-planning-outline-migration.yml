@@ -40,21 +40,19 @@ jobs:
       - name: Checkout Schedule
         uses: actions/checkout@v4
 
-      - name: Download public Outline migration branch
+      - name: Download exact Outline migration
         run: |
           curl --fail --location --silent --show-error \
-            https://codeload.github.com/ivan-s-2001/Outline-osp/tar.gz/refs/heads/feature/month-planning-schema \
-            --output /tmp/outline.tar.gz
-          mkdir _outline
-          tar -xzf /tmp/outline.tar.gz --strip-components=1 -C _outline
-          test -f _outline/server/migrations/20260719128000-create-month-planning.js
+            https://raw.githubusercontent.com/ivan-s-2001/Outline-osp/d3e07cde49fb1486e65cde6b99256e066177ed2d/server/migrations/20260719128000-create-month-planning.js \
+            --output /tmp/create-month-planning.js
+          test -s /tmp/create-month-planning.js
 
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
-      - name: Create minimal Outline schema
+      - name: Create current schedule schema
         run: |
           psql -h localhost -U outline -d outline -v ON_ERROR_STOP=1 <<'SQL'
           CREATE TYPE public.user_role AS ENUM ('admin', 'member');
@@ -111,12 +109,30 @@ jobs:
             '22222222-2222-4222-8222-222222222222'
           );
           SQL
-
-      - name: Apply exact Outline schedule migrations
-        run: |
-          node _outline/server/scripts/export-schedule-migration-sql.js > /tmp/schedule-migrations.sql
           psql -h localhost -U outline -d outline -v ON_ERROR_STOP=1 \
-            -f /tmp/schedule-migrations.sql
+            -f tests/schema/outline-schedule-contract.sql
+
+      - name: Extract and apply exact Outline migration
+        run: |
+          node <<'NODE' > /tmp/month-planning.sql
+          const migration = require('/tmp/create-month-planning.js');
+          const statements = [];
+          const queryInterface = {
+            sequelize: {
+              transaction: async (callback) => callback({}),
+              query: async (sql) => statements.push(sql),
+            },
+          };
+          (async () => {
+            await migration.up(queryInterface);
+            process.stdout.write(statements.join('\n'));
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+          psql -h localhost -U outline -d outline -v ON_ERROR_STOP=1 \
+            -f /tmp/month-planning.sql
 
       - name: Validate month planning migration
         run: |
