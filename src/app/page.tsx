@@ -10,6 +10,14 @@ function first(value: string | string[] | undefined): string | null {
 
 export default async function HomePage({ searchParams }: HomePageProps) {
   const params = await searchParams;
+  const returnTo = first(params.returnTo);
+  const mode =
+    first(params.mode) === "vacations" ||
+    first(params.embed) === "1" ||
+    returnTo === "/vacations" ||
+    returnTo === "/employees/absences"
+      ? "vacations"
+      : "schedule";
 
   return (
     <EmailAccessGate
@@ -18,7 +26,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       signature={first(params.signature)}
       token={first(params.token)}
       email={first(params.email)}
-      returnTo={first(params.returnTo)}
+      mode={mode}
     />
   );
 }
