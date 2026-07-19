@@ -4,7 +4,6 @@ import { QueryProvider } from "@/components/providers/query-provider";
 import { SocketProvider } from "@/components/providers/socket-provider";
 import { SessionProvider } from "next-auth/react";
 import { ThemeProvider } from "next-themes";
-import { ChatWidget } from "@/components/ai/chat-widget";
 
 export default function DashboardLayout({
   children,
@@ -28,7 +27,6 @@ export default function DashboardLayout({
                 {children}
               </main>
             </div>
-            <ChatWidget />
             <Toaster
               position="top-right"
               richColors={false}
