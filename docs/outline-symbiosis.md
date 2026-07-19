@@ -49,11 +49,11 @@ Run `docker-symbiosis-check.bat` at any time to verify:
 3. The browser is redirected to Schichtplaner.
 4. Schichtplaner validates and consumes the token.
 5. The same token identifier cannot be used a second time.
-6. Schichtplaner reads the user, workspace, groups, and group memberships from `public`.
+6. Schichtplaner reads every active user, group, and group membership in the workspace from `public`.
 7. Local scheduling records and link records are synchronized in `schedule`.
 8. A normal Schichtplaner session is created.
 
-Passwords and Outline session cookies are not copied into Schichtplaner.
+Passwords and Outline session cookies are not copied into Schichtplaner. Outline controls identity and department membership; local `OWNER` and `MANAGER` scheduling roles are preserved during synchronization.
 
 ## Department switching
 
@@ -67,7 +67,7 @@ Switching a department changes:
 - shift assignments and cell editing permissions;
 - the department assigned to newly created shifts.
 
-Outline administrators receive access to every active group in their workspace. Other users receive access only to groups in which they are members.
+Outline administrators receive access to every active group in their workspace. Other users receive access only to groups in which they are members. Access is checked against the current Outline tables on every department-dependent request, so removing a user from a group takes effect without waiting for their Schichtplaner session to expire.
 
 ## Database URLs inside Docker
 
