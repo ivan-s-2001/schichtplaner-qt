@@ -14,7 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/outline?schema=schedule
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/outline
+      DATABASE_SCHEMA: schedule
       NEXTAUTH_SECRET: ci-nextauth-secret
       SCHEDULE_SSO_SECRET: ci-outline-sso-secret
       ALLOW_EMAIL_LOGIN: "false"
@@ -24,7 +25,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      - run: npm ci --legacy-peer-deps
       - run: npx prisma generate
       - run: npx tsc --noEmit
       - run: npm run build
