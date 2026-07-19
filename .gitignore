@@ -33,7 +33,6 @@ yarn-error.log*
 .env
 .env.*
 !.env.symbiosis.example
-!.env.production.example
 
 # Local HTTPS artifacts
 .symbiosis-https/
