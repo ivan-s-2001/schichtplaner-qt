@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getSelectedDivision } from "@/lib/selected-division";
 import { emitToOrg, emitToSchedule } from "@/lib/emit";
 
 const bookingSchema = z.object({
@@ -9,26 +10,39 @@ const bookingSchema = z.object({
   userId: z.string().min(1),
 });
 
-/**
- * POST /api/bookings
- *
- * Book an employee into a shift.
- * Manager+ can book anyone, employees can only book themselves.
- */
-export async function POST(request: NextRequest) {
+async function getContext(request: NextRequest, shiftId: string) {
   const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
-  }
+  if (!member) return { error: "unauthorized" as const };
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
-  }
+  const division = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+  if (!division) return { error: "division" as const };
 
-  const parsed = bookingSchema.safeParse(body);
+  const shift = await db.shift.findFirst({
+    where: {
+      id: shiftId,
+      divisionId: division.id,
+      deletedAt: null,
+      schedule: {
+        organizationId: member.organizationId,
+        divisionId: division.id,
+        deletedAt: null,
+      },
+    },
+    include: { bookings: true },
+  });
+  if (!shift) return { error: "not_found" as const };
+
+  return { member, division, shift };
+}
+
+export async function POST(request: NextRequest) {
+  const parsed = bookingSchema.safeParse(
+    await request.json().catch(() => null)
+  );
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Ошибка проверки данных", details: parsed.error.issues },
@@ -37,70 +51,49 @@ export async function POST(request: NextRequest) {
   }
 
   const { shiftId, userId } = parsed.data;
+  const context = await getContext(request, shiftId);
+  if ("error" in context) {
+    const status = context.error === "unauthorized" ? 401 : context.error === "division" ? 403 : 404;
+    return NextResponse.json({ error: "Смена недоступна" }, { status });
+  }
 
-  // Employees can only book themselves
-  if (!isManagerOrAbove(member.role) && userId !== member.user.id) {
+  if (!isManagerOrAbove(context.member.role) && userId !== context.member.user.id) {
     return NextResponse.json(
-      { error: "Mitarbeiter koennen nur sich selbst buchen" },
+      { error: "Сотрудник может назначить только себя" },
       { status: 403 }
     );
   }
 
-  // Verify shift exists and belongs to the user's org
-  const shift = await db.shift.findFirst({
-    where: { id: shiftId, deletedAt: null },
-    include: {
-      schedule: { select: { organizationId: true } },
-      bookings: true,
-    },
-  });
-
-  if (!shift || shift.schedule.organizationId !== member.organizationId) {
-    return NextResponse.json(
-      { error: "Смена не найдена" },
-      { status: 404 }
-    );
-  }
-
-  // Verify the target user is a member of the same org
-  const targetMember = await db.organizationMember.findFirst({
+  const divisionMember = await db.divisionMember.findUnique({
     where: {
-      organizationId: member.organizationId,
-      userId,
-      isActive: true,
+      divisionId_userId: {
+        divisionId: context.division.id,
+        userId,
+      },
     },
   });
-
-  if (!targetMember) {
+  if (!divisionMember) {
     return NextResponse.json(
-      { error: "Mitarbeiter nicht gefunden" },
+      { error: "Сотрудник не состоит в выбранном отделе" },
       { status: 404 }
     );
   }
 
-  // Check shift isn't full
-  if (shift.bookings.length >= shift.maxEmployees) {
+  if (context.shift.bookings.length >= context.shift.maxEmployees) {
+    return NextResponse.json({ error: "Смена заполнена" }, { status: 409 });
+  }
+  if (context.shift.bookings.some((booking) => booking.userId === userId)) {
     return NextResponse.json(
-      { error: "Schicht ist voll" },
+      { error: "Сотрудник уже назначен на смену" },
       { status: 409 }
     );
   }
 
-  // Check employee not already booked in this shift
-  const existingBooking = shift.bookings.find((b) => b.userId === userId);
-  if (existingBooking) {
-    return NextResponse.json(
-      { error: "Mitarbeiter ist bereits in dieser Schicht gebucht" },
-      { status: 409 }
-    );
-  }
-
-  // Create the booking
   const booking = await db.booking.create({
     data: {
       shiftId,
       userId,
-      bookedBy: member.user.id,
+      bookedBy: context.member.user.id,
     },
     include: {
       user: {
@@ -115,43 +108,23 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  // Broadcast real-time update
-  emitToOrg(member.organizationId, "booking:changed", {
-    scheduleId: shift.scheduleId,
+  const event = {
+    scheduleId: context.shift.scheduleId,
+    divisionId: context.division.id,
     shiftId,
     userId,
     action: "booked",
-  });
-  emitToSchedule(shift.scheduleId, "booking:changed", {
-    scheduleId: shift.scheduleId,
-    shiftId,
-    userId,
-    action: "booked",
-  });
+  };
+  emitToOrg(context.member.organizationId, "booking:changed", event);
+  emitToSchedule(context.shift.scheduleId, "booking:changed", event);
 
   return NextResponse.json({ booking }, { status: 201 });
 }
 
-/**
- * DELETE /api/bookings
- *
- * Unbook an employee from a shift.
- * Manager+ can unbook anyone, employees can only unbook themselves.
- */
 export async function DELETE(request: NextRequest) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
-  }
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
-  }
-
-  const parsed = bookingSchema.safeParse(body);
+  const parsed = bookingSchema.safeParse(
+    await request.json().catch(() => null)
+  );
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Ошибка проверки данных", details: parsed.error.issues },
@@ -160,59 +133,37 @@ export async function DELETE(request: NextRequest) {
   }
 
   const { shiftId, userId } = parsed.data;
+  const context = await getContext(request, shiftId);
+  if ("error" in context) {
+    const status = context.error === "unauthorized" ? 401 : context.error === "division" ? 403 : 404;
+    return NextResponse.json({ error: "Смена недоступна" }, { status });
+  }
 
-  // Employees can only unbook themselves
-  if (!isManagerOrAbove(member.role) && userId !== member.user.id) {
+  if (!isManagerOrAbove(context.member.role) && userId !== context.member.user.id) {
     return NextResponse.json(
-      { error: "Mitarbeiter koennen nur sich selbst abbuchen" },
+      { error: "Сотрудник может снять только себя" },
       { status: 403 }
     );
   }
 
-  // Verify shift belongs to the user's org
-  const shift = await db.shift.findFirst({
-    where: { id: shiftId, deletedAt: null },
-    include: {
-      schedule: { select: { organizationId: true } },
-    },
-  });
-
-  if (!shift || shift.schedule.organizationId !== member.organizationId) {
-    return NextResponse.json(
-      { error: "Смена не найдена" },
-      { status: 404 }
-    );
-  }
-
-  // Find and delete the booking
   const booking = await db.booking.findUnique({
     where: { shiftId_userId: { shiftId, userId } },
   });
-
   if (!booking) {
-    return NextResponse.json(
-      { error: "Buchung nicht gefunden" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Назначение не найдено" }, { status: 404 });
   }
 
-  await db.booking.delete({
-    where: { id: booking.id },
-  });
+  await db.booking.delete({ where: { id: booking.id } });
 
-  // Broadcast real-time update
-  emitToOrg(member.organizationId, "booking:changed", {
-    scheduleId: shift.scheduleId,
+  const event = {
+    scheduleId: context.shift.scheduleId,
+    divisionId: context.division.id,
     shiftId,
     userId,
     action: "unbooked",
-  });
-  emitToSchedule(shift.scheduleId, "booking:changed", {
-    scheduleId: shift.scheduleId,
-    shiftId,
-    userId,
-    action: "unbooked",
-  });
+  };
+  emitToOrg(context.member.organizationId, "booking:changed", event);
+  emitToSchedule(context.shift.scheduleId, "booking:changed", event);
 
   return NextResponse.json({ success: true });
 }
