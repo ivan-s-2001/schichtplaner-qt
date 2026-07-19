@@ -5,9 +5,11 @@ const { parse } = require("node:url");
 const next = require("next");
 const { Pool } = require("pg");
 const { Server: SocketIOServer } = require("socket.io");
-const requiredServerFiles = require("./.next/required-server-files.json");
 
 const dev = process.env.NODE_ENV !== "production";
+const requiredServerFiles = dev
+  ? null
+  : require("./.next/required-server-files.json");
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 const port = parsePort(process.env.PORT, 3000);
 const publicUrl =
@@ -27,7 +29,7 @@ const app = next({
   dev,
   hostname,
   port,
-  conf: requiredServerFiles.config,
+  ...(requiredServerFiles ? { conf: requiredServerFiles.config } : {}),
 });
 const handle = app.getRequestHandler();
 
