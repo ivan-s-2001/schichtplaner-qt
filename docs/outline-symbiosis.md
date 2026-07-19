@@ -40,12 +40,24 @@ Outline является единственным источником личн�
 ## Авторизация
 
 1. Пользователь входит в Outline.
-2. Пункт «Расписание» вызывает `/api/schedule.open`.
-3. Outline создаёт одноразовый HS256 SSO-токен сроком на 60 секунд.
-4. Schedule проверяет подпись и помечает `jti` использованным.
-5. Сессия Schedule содержит UUID пользователя Outline.
+2. Пункт «График» или «Отпуска» вызывает защищённый API Outline.
+3. Outline создаёт HS256 SSO-токен со сроком действия 60 секунд и уникальным `jti`.
+4. Schedule проверяет алгоритм, подпись, issuer, audience, UUID, срок действия и максимальную продолжительность токена.
+5. `jti` атомарно записывается в `schedule.outline_sso_tokens`; повторное использование отклоняется.
+6. Параметр `token` сразу удаляется из адресной строки, после чего Schedule создаёт собственную защищённую сессию.
 
-Прямой вход по email в Schedule отключён.
+Постоянная подпись `userId:teamId` больше не используется. Прямой вход по email в Schedule отключён.
+
+## HTTPS и CSRF
+
+Caddy входит в основной `docker-compose.symbiosis.yml` и является единственной публичной точкой входа:
+
+- `https://outline.qt.local` → `outline:3000`;
+- `https://schedule.qt.local` → `schedule:3000`.
+
+Outline получает `X-Forwarded-Proto: https`, работает с `FORCE_HTTPS=true` и доверяет заголовкам встроенного proxy. Это необходимо для корректных secure cookies и CSRF.
+
+`OUTLINE_SECRET_KEY`, `OUTLINE_UTILS_SECRET`, `NEXTAUTH_SECRET` и `SCHEDULE_SSO_SECRET` создаются один раз в `.env.symbiosis` и не должны меняться при пересборке. Скрипт импортирует существующий `SECRET_KEY` из `outline.qt.local/.env`, чтобы обновление не аннулировало текущие сессии и зашифрованные данные.
 
 ## Docker
 
@@ -65,12 +77,25 @@ Open Server Panel не используется. Каталог `C:\OSPanel\home
 .\docker-symbiosis-up.bat
 ```
 
-Docker Compose запускает Outline, Schedule, PostgreSQL, Redis и Mailpit.
+Первый запуск добавляет локальные домены в `hosts`, устанавливает корневой сертификат Caddy и включает использование системного хранилища сертификатов в Firefox.
 
 Сервисы:
 
-- Outline: `http://localhost:3000`;
-- Schedule: `http://localhost:41873`;
+- Outline: `https://outline.qt.local`;
+- Schedule: `https://schedule.qt.local`;
 - Mailpit: `http://localhost:8025`;
+- диагностический Outline HTTP: `http://127.0.0.1:3000`;
+- диагностический Schedule HTTP: `http://127.0.0.1:41873`;
 - PostgreSQL: одна внутренняя Docker-база `outline`;
-- схемы PostgreSQL: `public` и `schedule`.
+- схемы PostgreSQL: `public`, `schedule` и `attestation`.
+
+## Realtime
+
+Production-образ Schedule запускает `server.cjs`, который поднимает Next.js и Socket.IO на одном порту. Socket.IO:
+
+- принимает cookies только с origin Schedule;
+- проверяет сессию через Auth.js;
+- загружает активного пользователя из `public.users`;
+- автоматически подключает пользователя только к комнате его workspace;
+- разрешает комнату графика только если график принадлежит тому же workspace;
+- не принимает от клиента команды на произвольную ретрансляцию событий.
