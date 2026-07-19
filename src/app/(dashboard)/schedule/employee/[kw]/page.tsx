@@ -1,8 +1,5 @@
 import { redirect } from "next/navigation";
-import { EmployeeGridWrapper } from "@/components/schedule/employee-grid-wrapper";
-import { ShiftLegend } from "@/components/schedule/shift-legend";
-import { ViewSwitcher } from "@/components/schedule/view-switcher";
-import { WeekNav } from "@/components/schedule/week-nav";
+import { DivisionScheduleView } from "@/components/schedule/division-schedule-view";
 import {
   formatKW,
   getCurrentKW,
@@ -28,32 +25,11 @@ export default async function EmployeeKWPage({ params }: EmployeeKWPageProps) {
   const weekDateStrings = weekDates.map((date) => date.toISOString());
 
   return (
-    <div className="schedule-equal-day-columns space-y-5">
-      <header className="space-y-3">
-        <div>
-          <h1 className="text-[26px] font-medium leading-tight text-[#111319]">
-            График службы заботы
-          </h1>
-          <p className="mt-1 text-sm text-[#66778f]">
-            Недельная таблица сотрудников и смен
-          </p>
-        </div>
-        <ViewSwitcher kw={kw} />
-      </header>
-
-      <WeekNav
-        weekNumber={weekNumber}
-        year={year}
-        baseUrl="/schedule/employee"
-      />
-
-      <ShiftLegend />
-
-      <EmployeeGridWrapper
-        weekNumber={weekNumber}
-        year={year}
-        weekDateStrings={weekDateStrings}
-      />
-    </div>
+    <DivisionScheduleView
+      kw={kw}
+      weekNumber={weekNumber}
+      year={year}
+      weekDateStrings={weekDateStrings}
+    />
   );
 }
