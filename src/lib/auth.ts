@@ -7,6 +7,10 @@ import {
   syncOutlineUser,
   verifyOutlineToken,
 } from "@/lib/outline-integration";
+import {
+  captureScheduleLeadershipRoles,
+  restoreScheduleLeadershipRoles,
+} from "@/lib/outline-role-preservation";
 import { consumeOutlineSsoToken } from "@/lib/outline-sso-token";
 import { syncOutlineWorkspace } from "@/lib/outline-workspace-sync";
 
@@ -39,18 +43,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           try {
             const payload = verifyOutlineToken(token);
             await consumeOutlineSsoToken(payload);
+
+            // Outline controls identity and department membership. Local
+            // scheduling leadership roles remain authoritative in Schichtplaner.
+            const preservedRoles = await captureScheduleLeadershipRoles();
             const membership = await syncOutlineUser(payload);
             await syncOutlineWorkspace(
               payload.teamId,
               membership.organizationId
             );
+            await restoreScheduleLeadershipRoles(
+              membership.organizationId,
+              preservedRoles
+            );
+
+            const synchronizedUser = await db.user.findUnique({
+              where: { id: membership.user.id },
+            });
+
+            if (!synchronizedUser) return null;
 
             return {
-              id: membership.user.id,
-              email: membership.user.email,
+              id: synchronizedUser.id,
+              email: synchronizedUser.email,
               name:
-                `${membership.user.firstName} ${membership.user.lastName}`.trim() ||
-                membership.user.email,
+                `${synchronizedUser.firstName} ${synchronizedUser.lastName}`.trim() ||
+                synchronizedUser.email,
             };
           } catch (error) {
             console.error("Outline SSO failed", error);
