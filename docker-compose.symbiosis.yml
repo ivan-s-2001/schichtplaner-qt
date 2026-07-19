@@ -1,0 +1,98 @@
+name: outline-schichtplaner
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: outline
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-outline}
+      POSTGRES_DB: outline
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - shared_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U outline -d outline"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - shared_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  outline:
+    build:
+      context: ../Outline-osp
+      dockerfile: Dockerfile.symbiosis
+    env_file:
+      - ../Outline-osp/.env
+      - ./.env.symbiosis
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      URL: ${OUTLINE_URL:-http://localhost:3000}
+      DATABASE_URL: postgresql://outline:${POSTGRES_PASSWORD:-outline}@postgres:5432/outline
+      PGSSLMODE: disable
+      REDIS_URL: redis://redis:6379/0
+      FILE_STORAGE: local
+      FILE_STORAGE_LOCAL_ROOT_DIR: /var/lib/outline/data
+      FORCE_HTTPS: "false"
+      SCHEDULE_URL: ${SCHEDULE_URL:-http://localhost:41873}
+      SCHEDULE_SSO_SECRET: ${SCHEDULE_SSO_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${OUTLINE_PORT:-3000}:3000"
+    volumes:
+      - outline_file_data:/var/lib/outline/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/_health | grep -q OK"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+
+  schedule:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env.symbiosis
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: postgresql://outline:${POSTGRES_PASSWORD:-outline}@postgres:5432/outline
+      DATABASE_SCHEMA: schedule
+      NEXTAUTH_URL: ${SCHEDULE_URL:-http://localhost:41873}
+      APP_URL: ${SCHEDULE_URL:-http://localhost:41873}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      SCHEDULE_SSO_SECRET: ${SCHEDULE_SSO_SECRET}
+      ALLOW_EMAIL_LOGIN: "false"
+      REDIS_URL: redis://redis:6379/1
+    depends_on:
+      outline:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${SCHEDULE_PORT:-41873}:3000"
+    restart: unless-stopped
+
+volumes:
+  shared_postgres_data:
+  shared_redis_data:
+  outline_file_data:
