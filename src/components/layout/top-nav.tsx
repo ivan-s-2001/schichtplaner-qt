@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { UserMenu } from "./user-menu";
 import { MobileNav } from "./mobile-nav";
 import { ConnectionStatus } from "./connection-status";
+import { DivisionSwitcher } from "./division-switcher";
 
 const navItems = [
   { key: "schedule", icon: CalendarIcon, href: "/schedule/employee", label: "График" },
@@ -84,6 +85,8 @@ export function TopNav() {
         </nav>
 
         <div className="ml-auto flex items-center gap-1">
+          <DivisionSwitcher />
+
           <Link href="/ai/chat" className={itemClass(pathname.startsWith("/ai"))}>
             <SparklesIcon className="size-4" />
             <span className="hidden lg:inline">ИИ</span>
