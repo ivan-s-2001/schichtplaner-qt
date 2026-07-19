@@ -94,8 +94,11 @@ services:
       DATABASE_URL: postgresql://outline:${POSTGRES_PASSWORD:-outline}@postgres:5432/outline
       DATABASE_SCHEMA: schedule
       NEXTAUTH_URL: ${SCHEDULE_URL:-http://localhost:41873}
+      AUTH_URL: ${SCHEDULE_URL:-http://localhost:41873}
       APP_URL: ${SCHEDULE_URL:-http://localhost:41873}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      AUTH_SECRET: ${NEXTAUTH_SECRET}
+      AUTH_TRUST_HOST: "true"
       SCHEDULE_SSO_SECRET: ${SCHEDULE_SSO_SECRET}
       ALLOW_EMAIL_LOGIN: "false"
       REDIS_URL: redis://redis:6379/1
