@@ -38,17 +38,16 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 2px);
-  --radius-2xl: calc(var(--radius) + 4px);
-  --radius-3xl: calc(var(--radius) + 8px);
-  --radius-4xl: calc(var(--radius) + 12px);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
 }
 
-:root,
-.dark {
+:root {
   color-scheme: light;
 
   --outline-font-sans:
@@ -57,58 +56,72 @@
   --outline-font-mono:
     "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
 
-  --outline-almost-black: #111319;
-  --outline-light-black: #2f3336;
-  --outline-white: #ffffff;
-  --outline-accent: #0366d6;
-  --outline-accent-hover: #035abd;
-  --outline-slate: #66778f;
-  --outline-slate-light: #dae1e9;
-  --outline-slate-dark: #394351;
-  --outline-smoke: #f4f7fa;
-  --outline-smoke-light: #f9fbfc;
-  --outline-smoke-dark: #e8ebed;
-  --outline-danger: #ed2651;
-  --outline-warning: #f08a24;
-  --outline-success: #3ad984;
-  --outline-info: #a0d3e8;
-  --outline-sidebar-background: #eef2f6;
-  --outline-sidebar-hover: #dee5ed;
-  --outline-sidebar-active: #cdd8e5;
-  --outline-sidebar-text: #394351;
-
-  --radius: 0.5rem;
+  --radius: 0.375rem;
   --background: #ffffff;
   --foreground: #111319;
-  --card: #ffffff;
-  --card-foreground: #111319;
-  --popover: #ffffff;
-  --popover-foreground: #111319;
   --primary: #0366d6;
   --primary-foreground: #ffffff;
-  --secondary: #eef2f6;
-  --secondary-foreground: #2f3336;
-  --muted: #f4f7fa;
-  --muted-foreground: #4e5c6e;
-  --accent: #dee5ed;
-  --accent-foreground: #111319;
   --destructive: #ed2651;
   --border: #dae1e9;
   --input: #c6d3e1;
   --ring: #0366d6;
-  --chart-1: #0366d6;
+  --outline-host-neutral: #eef2f6;
+  --outline-host-neutral-hover: #dee5ed;
+
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--outline-host-neutral);
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in srgb, var(--foreground) 4%, var(--background));
+  --muted-foreground: color-mix(in srgb, var(--foreground) 68%, var(--background));
+  --accent: var(--outline-host-neutral-hover);
+  --accent-foreground: var(--foreground);
+  --chart-1: var(--primary);
   --chart-2: #3ad984;
   --chart-3: #f08a24;
   --chart-4: #9e5cf7;
   --chart-5: #2bc2ff;
-  --sidebar: #eef2f6;
-  --sidebar-foreground: #394351;
-  --sidebar-primary: #cdd8e5;
-  --sidebar-primary-foreground: #111319;
-  --sidebar-accent: #dee5ed;
-  --sidebar-accent-foreground: #111319;
-  --sidebar-border: #dae1e9;
-  --sidebar-ring: #0366d6;
+  --sidebar: var(--outline-host-neutral);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--outline-host-neutral-hover);
+  --sidebar-primary-foreground: var(--foreground);
+  --sidebar-accent: var(--outline-host-neutral-hover);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  --outline-almost-black: var(--foreground);
+  --outline-light-black: color-mix(in srgb, var(--foreground) 84%, var(--background));
+  --outline-white: var(--background);
+  --outline-accent: var(--primary);
+  --outline-accent-hover: color-mix(in srgb, var(--primary) 88%, #000000);
+  --outline-slate: var(--muted-foreground);
+  --outline-slate-light: var(--border);
+  --outline-slate-dark: color-mix(in srgb, var(--foreground) 76%, var(--background));
+  --outline-smoke: var(--muted);
+  --outline-smoke-light: color-mix(in srgb, var(--foreground) 2%, var(--background));
+  --outline-smoke-dark: color-mix(in srgb, var(--foreground) 8%, var(--background));
+  --outline-danger: var(--destructive);
+  --outline-warning: #f08a24;
+  --outline-success: #3ad984;
+  --outline-info: #a0d3e8;
+}
+
+.dark,
+:root[data-outline-host-theme="dark"] {
+  color-scheme: dark;
+  --background: #191b20;
+  --foreground: #f2f3f5;
+  --primary: #5b9df9;
+  --primary-foreground: #ffffff;
+  --destructive: #ff5576;
+  --border: #353941;
+  --input: #454a54;
+  --ring: #5b9df9;
+  --outline-host-neutral: #24272e;
+  --outline-host-neutral-hover: #30343c;
 }
 
 @layer base {
@@ -117,6 +130,7 @@
   }
 
   html {
+    min-height: 100%;
     background: var(--background);
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
@@ -125,10 +139,11 @@
 
   body {
     min-height: 100vh;
+    margin: 0;
     background: var(--background);
     color: var(--foreground);
     font-family: var(--outline-font-sans);
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.5;
   }
 
@@ -138,9 +153,10 @@
   h4,
   h5,
   h6 {
-    color: var(--outline-almost-black);
+    color: var(--foreground);
     font-weight: 600;
     line-height: 1.25;
+    letter-spacing: -0.01em;
   }
 
   a,
@@ -153,30 +169,103 @@
   }
 
   ::selection {
-    background: rgb(3 102 214 / 18%);
+    background: color-mix(in srgb, var(--primary) 18%, transparent);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--foreground) 24%, transparent);
+    background-clip: padding-box;
   }
 }
 
-/* Floating surfaces only. Ordinary cards and tables stay flat. */
+.outline-native-toolbar {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  background: color-mix(in srgb, var(--background) 84%, transparent);
+  backdrop-filter: blur(20px);
+  transform: translate3d(0, 0, 0);
+}
+
+.outline-native-tabs {
+  scrollbar-width: none;
+}
+
+.outline-native-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.outline-native-tab {
+  border-radius: 4px 4px 0 0;
+  text-decoration: none;
+  transition:
+    color 120ms ease-out,
+    background 120ms ease-out;
+}
+
+.outline-native-tab:hover {
+  background: color-mix(in srgb, var(--outline-host-neutral-hover) 62%, transparent);
+}
+
+.outline-native-control {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 7%);
+}
+
+.outline-native-control:hover {
+  background: var(--outline-host-neutral-hover);
+}
+
+/* Standard application surfaces follow Outline's flat visual language. */
+[data-slot="card"] {
+  border-color: var(--border) !important;
+  border-radius: 6px !important;
+  background: var(--background) !important;
+  box-shadow: none !important;
+}
+
+[data-slot="button"] {
+  border-radius: 6px !important;
+}
+
+[data-slot="input"],
+[data-slot="textarea"],
+[data-slot="select-trigger"] {
+  border-radius: 4px !important;
+  background: var(--background) !important;
+  box-shadow: none !important;
+}
+
 [data-slot="dialog-overlay"] {
   background: rgb(0 0 0 / 25%) !important;
 }
 
 [data-slot="dialog-content"],
 [data-radix-popper-content-wrapper] > * {
+  border-color: var(--border) !important;
+  border-radius: 8px !important;
+  background: var(--background) !important;
   box-shadow:
     0 4px 8px rgb(0 0 0 / 8%),
     0 30px 40px rgb(0 0 0 / 8%);
 }
 
 [data-slot="tooltip-content"] {
-  background: #111319;
-  color: #ffffff;
+  background: var(--foreground);
+  color: var(--background);
 }
 
-/* Schedule keeps the Excel colors but uses clear, high-contrast UI text. */
+/* Schedule keeps Excel-like cells while using the host theme for structure. */
 .schedule-equal-day-columns {
-  color: #111319;
+  color: var(--foreground);
 }
 
 .schedule-equal-day-columns > div,
@@ -186,7 +275,7 @@
 }
 
 .schedule-equal-day-columns .text-muted-foreground {
-  color: #4e5c6e !important;
+  color: var(--muted-foreground) !important;
 }
 
 .schedule-equal-day-columns table {
@@ -209,15 +298,15 @@
 }
 
 .schedule-equal-day-columns table th {
-  border-color: rgb(218 225 233 / 90%);
-  color: #2f3336;
+  border-color: color-mix(in srgb, var(--border) 90%, transparent);
+  color: color-mix(in srgb, var(--foreground) 84%, var(--background));
   font-size: 13px;
   font-weight: 600;
 }
 
 .schedule-equal-day-columns table td {
-  border-color: rgb(218 225 233 / 90%);
-  color: #111319;
+  border-color: color-mix(in srgb, var(--border) 90%, transparent);
+  color: var(--foreground);
 }
 
 /* Weekly schedule overtime badge. */
@@ -234,10 +323,10 @@ table[class*="min-w-[1080px]"] button.relative > span > span:nth-child(2) {
   min-height: 1rem;
   margin: 0;
   padding: 0.1rem 0.3rem;
-  border: 1px solid rgb(255 255 255 / 75%);
+  border: 1px solid color-mix(in srgb, var(--background) 75%, transparent);
   border-radius: 999px;
-  background: rgb(17 19 25 / 92%);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--foreground) 92%, transparent);
+  color: var(--background);
   font-size: 0.625rem;
   font-weight: 600;
   line-height: 1;
