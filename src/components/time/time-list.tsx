@@ -20,9 +20,14 @@ import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DataPanel,
+  PageHeader,
+  PageToolbar,
+  StatePanel,
+} from "@/components/layout/page-primitives";
 import { useCurrentMember } from "@/lib/hooks/use-current-member";
 import { TimeRecordForm } from "./time-record-form";
 import { Stopwatch } from "./stopwatch";
@@ -129,7 +134,7 @@ export function TimeList() {
       toast.success("Запись удалена");
       await queryClient.invalidateQueries({ queryKey: ["time-records"] });
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (mutationError: Error) => toast.error(mutationError.message),
   });
 
   function toggleUser(userId: string) {
@@ -153,35 +158,34 @@ export function TimeList() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Учёт времени</h1>
-          <p className="text-sm text-muted-foreground">
-            Рабочее время сотрудников выбранного отдела
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowStopwatch((value) => !value)}
-          >
-            <Timer className="size-4" />
-            Секундомер
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              setEditingRecord(null);
-              setShowRecordForm(true);
-            }}
-          >
-            <Plus className="size-4" />
-            Добавить
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        icon={Clock}
+        title="Учёт времени"
+        description="Рабочее время сотрудников выбранного подразделения"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowStopwatch((value) => !value)}
+            >
+              <Timer className="size-4" />
+              Секундомер
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingRecord(null);
+                setShowRecordForm(true);
+              }}
+            >
+              <Plus className="size-4" />
+              Добавить
+            </Button>
+          </>
+        }
+      />
 
       {showStopwatch && (
         <div className="max-w-sm">
@@ -189,21 +193,23 @@ export function TimeList() {
         </div>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <PageToolbar>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="icon-sm"
+            aria-label="Предыдущий месяц"
             onClick={() => setCurrentMonth((date) => subMonths(date, 1))}
           >
             <ChevronLeft className="size-4" />
           </Button>
-          <span className="min-w-40 text-center text-lg font-semibold capitalize">
+          <span className="min-w-40 text-center text-base font-semibold capitalize">
             {format(currentMonth, "LLLL yyyy", { locale: ru })}
           </span>
           <Button
             variant="outline"
             size="icon-sm"
+            aria-label="Следующий месяц"
             onClick={() => setCurrentMonth((date) => addMonths(date, 1))}
           >
             <ChevronRight className="size-4" />
@@ -221,18 +227,24 @@ export function TimeList() {
             />
           </div>
         )}
-      </div>
+      </PageToolbar>
 
       {isLoading && <TimeListSkeleton />}
+
       {error && (
-        <Card className="p-6 text-center text-destructive">
-          Не удалось загрузить данные.
-        </Card>
+        <StatePanel
+          title="Не удалось загрузить учёт времени"
+          description="Обновите страницу или повторите попытку позже."
+          tone="danger"
+        />
       )}
+
       {!isLoading && !error && filteredEmployees.length === 0 && (
-        <Card className="p-10 text-center text-muted-foreground">
-          Записей за выбранный месяц нет.
-        </Card>
+        <StatePanel
+          icon={Clock}
+          title={search ? "Сотрудники не найдены" : "Записей за месяц нет"}
+          description={search ? "Измените запрос поиска." : undefined}
+        />
       )}
 
       {!isLoading &&
@@ -240,10 +252,10 @@ export function TimeList() {
         filteredEmployees.map((employee) => {
           const expanded = expandedUsers.has(employee.userId);
           return (
-            <Card key={employee.userId} className="overflow-hidden">
+            <DataPanel key={employee.userId}>
               <button
                 type="button"
-                className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-muted/50"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
                 onClick={() => toggleUser(employee.userId)}
               >
                 <Avatar>
@@ -296,6 +308,7 @@ export function TimeList() {
                           <Button
                             variant="ghost"
                             size="icon-xs"
+                            aria-label="Изменить запись"
                             onClick={() => editRecord(record)}
                           >
                             <Pencil className="size-3.5" />
@@ -303,6 +316,7 @@ export function TimeList() {
                           <Button
                             variant="ghost"
                             size="icon-xs"
+                            aria-label="Удалить запись"
                             disabled={deleteMutation.isPending}
                             onClick={() => removeRecord(record)}
                           >
@@ -314,7 +328,7 @@ export function TimeList() {
                   )}
                 </div>
               )}
-            </Card>
+            </DataPanel>
           );
         })}
 
@@ -335,8 +349,8 @@ function TimeListSkeleton() {
   return (
     <div className="space-y-3">
       {Array.from({ length: 3 }).map((_, index) => (
-        <Card key={index} className="p-4">
-          <div className="flex items-center gap-3">
+        <DataPanel key={index}>
+          <div className="flex items-center gap-3 px-4 py-3">
             <Skeleton className="size-10 rounded-full" />
             <div className="flex-1 space-y-2">
               <Skeleton className="h-4 w-40" />
@@ -344,7 +358,7 @@ function TimeListSkeleton() {
             </div>
             <Skeleton className="h-6 w-16 rounded-full" />
           </div>
-        </Card>
+        </DataPanel>
       ))}
     </div>
   );
