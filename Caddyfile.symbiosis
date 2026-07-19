@@ -1,0 +1,33 @@
+{$OUTLINE_DOMAIN:outline.qt.local} {
+    tls internal
+    encode zstd gzip
+
+    reverse_proxy outline:3000 {
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-Host {host}
+    }
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+}
+
+{$SCHEDULE_DOMAIN:schedule.qt.local} {
+    tls internal
+    encode zstd gzip
+
+    reverse_proxy schedule:3000 {
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-Host {host}
+    }
+
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        Content-Security-Policy "frame-ancestors https://{$OUTLINE_DOMAIN:outline.qt.local}"
+        -Server
+    }
+}
