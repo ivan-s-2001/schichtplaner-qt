@@ -1,25 +1,24 @@
 {
-  "name": "schichtplaner",
+  "name": "schichtplaner-qt",
   "version": "0.1.0",
-  "description": "Open-source shift planning software with AI assistance, real-time collaboration, and self-hosting",
+  "description": "Self-hosted departmental scheduling integrated with Outline users and groups",
   "license": "MIT",
-  "author": "lennystepn-hue",
+  "author": "ivan-s-2001",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lennystepn-hue/schichtplaner.git"
+    "url": "https://github.com/ivan-s-2001/schichtplaner-qt.git"
   },
-  "homepage": "https://github.com/lennystepn-hue/schichtplaner",
+  "homepage": "https://github.com/ivan-s-2001/schichtplaner-qt",
   "bugs": {
-    "url": "https://github.com/lennystepn-hue/schichtplaner/issues"
+    "url": "https://github.com/ivan-s-2001/schichtplaner-qt/issues"
   },
   "keywords": [
-    "schichtplan",
     "shift-planning",
-    "dienstplan",
-    "workforce-management",
-    "nextjs",
+    "schedule",
+    "outline",
     "self-hosted",
-    "open-source"
+    "nextjs",
+    "postgresql"
   ],
   "scripts": {
     "dev": "next dev",
