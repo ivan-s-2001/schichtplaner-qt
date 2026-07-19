@@ -3,11 +3,11 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import {
   ensurePlanningPeriod,
-  findPlanningPeriod,
   loadShiftPoolTemplates,
   parsePlanningMonth,
   requireMonthPlanningAccess,
   toPlanningPeriod,
+  type MonthPlanningPeriodRow,
 } from "@/lib/month-planning";
 import type {
   MonthPlanningAssignment,
@@ -47,7 +47,9 @@ type AssignmentRow = {
 };
 
 function dateValue(value: Date | string) {
-  return typeof value === "string" ? value.slice(0, 10) : value.toISOString().slice(0, 10);
+  return typeof value === "string"
+    ? value.slice(0, 10)
+    : value.toISOString().slice(0, 10);
 }
 
 export async function GET(request: NextRequest) {
@@ -130,13 +132,15 @@ export async function GET(request: NextRequest) {
     items: itemsByPreference.get(preference.id) ?? [],
   }));
 
-  const assignments: MonthPlanningAssignment[] = assignmentRows.map((assignment) => ({
-    id: assignment.id,
-    userId: assignment.userId,
-    workDate: dateValue(assignment.workDate),
-    shiftTemplateCode: assignment.shiftTemplateCode,
-    updatedAt: assignment.updatedAt.toISOString(),
-  }));
+  const assignments: MonthPlanningAssignment[] = assignmentRows.map(
+    (assignment) => ({
+      id: assignment.id,
+      userId: assignment.userId,
+      workDate: dateValue(assignment.workDate),
+      shiftTemplateCode: assignment.shiftTemplateCode,
+      updatedAt: assignment.updatedAt.toISOString(),
+    })
+  );
 
   return NextResponse.json({
     period: toPlanningPeriod(period),
@@ -200,13 +204,7 @@ export async function PATCH(request: NextRequest) {
     WHERE "id" = ${parsed.data.periodId}
   `;
 
-  const period = await findPlanningPeriod(
-    access.division.id,
-    Number(request.nextUrl.searchParams.get("year") ?? 0),
-    Number(request.nextUrl.searchParams.get("month") ?? 0)
-  );
-
-  const updatedRows = await db.$queryRaw<Parameters<typeof toPlanningPeriod>[0][]>`
+  const updatedRows = await db.$queryRaw<MonthPlanningPeriodRow[]>`
     SELECT
       "id", "organizationId", "divisionId", "year", "month", "status",
       "preferenceDeadline", "publishedAt", "createdAt", "updatedAt"
@@ -214,8 +212,9 @@ export async function PATCH(request: NextRequest) {
     WHERE "id" = ${parsed.data.periodId}
     LIMIT 1
   `;
+  if (!updatedRows[0]) {
+    return NextResponse.json({ error: "Период не найден" }, { status: 404 });
+  }
 
-  return NextResponse.json({
-    period: updatedRows[0] ? toPlanningPeriod(updatedRows[0]) : period,
-  });
+  return NextResponse.json({ period: toPlanningPeriod(updatedRows[0]) });
 }
