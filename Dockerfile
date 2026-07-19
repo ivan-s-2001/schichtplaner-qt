@@ -8,20 +8,20 @@ RUN npm ci --legacy-peer-deps
 FROM base AS builder
 WORKDIR /app
 
-# Build-time placeholders. Prisma and Next.js validate these variables while
-# building the image, but the real runtime values are supplied by Docker Compose.
+# Non-sensitive build-time placeholders. Runtime values are supplied by
+# Docker Compose when the final container starts.
 ENV DATABASE_URL=postgresql://outline:outline@postgres:5432/outline
 ENV DATABASE_SCHEMA=schedule
 ENV NEXTAUTH_URL=http://localhost:41873
 ENV APP_URL=http://localhost:41873
-ENV NEXTAUTH_SECRET=docker-build-only-nextauth-secret
-ENV SCHEDULE_SSO_SECRET=docker-build-only-sso-secret
 ENV ALLOW_EMAIL_LOGIN=false
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
-RUN npm run build
+RUN NEXTAUTH_SECRET=docker-build-only-nextauth-secret \
+    SCHEDULE_SSO_SECRET=docker-build-only-sso-secret \
+    npm run build
 
 FROM base AS runner
 WORKDIR /app

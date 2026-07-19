@@ -57,6 +57,10 @@ services:
       SMTP_SECURE: "false"
       SMTP_FROM_EMAIL: "Outline <outline@local.test>"
       SMTP_REPLY_EMAIL: "Outline <outline@local.test>"
+    command:
+      - sh
+      - -c
+      - ./node_modules/.bin/sequelize db:migrate --env production-ssl-disabled && node build/server/index.js
     depends_on:
       postgres:
         condition: service_healthy
