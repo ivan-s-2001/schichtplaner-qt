@@ -22,12 +22,12 @@
   ],
   "scripts": {
     "dev": "next dev",
-    "build": "npm run i18n:check && next build",
-    "start": "next start",
+    "build": "npm run i18n:check && node --check server.cjs && next build",
+    "start": "node server.cjs",
     "lint": "eslint",
     "i18n:check": "node scripts/normalize-russian-ui.mjs",
-    "dev:server": "tsx watch server.ts",
-    "start:server": "node dist/server.js"
+    "dev:server": "node --watch server.cjs",
+    "start:server": "node server.cjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.4.2",
