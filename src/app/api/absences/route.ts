@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
 import { getSelectedDivision } from "@/lib/selected-division";
+import { isVacationCategoryName } from "@/lib/vacation";
 import { startOfMonth, endOfMonth, parse } from "date-fns";
 
 export async function GET(request: NextRequest) {
@@ -171,6 +172,12 @@ export async function POST(request: NextRequest) {
   });
   if (!category) {
     return NextResponse.json({ error: "Категория не найдена" }, { status: 404 });
+  }
+  if (isVacationCategoryName(category.name)) {
+    return NextResponse.json(
+      { error: "Отпуск добавляется на отдельной странице «Отпуск»" },
+      { status: 409 }
+    );
   }
 
   const dateFrom = new Date(`${data.dateFrom}T00:00:00.000Z`);
