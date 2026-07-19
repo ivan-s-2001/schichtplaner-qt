@@ -12,52 +12,48 @@ export async function GET() {
     return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
   }
 
-  const organization = await db.organization.findUnique({
-    where: { id: member.organizationId },
-    include: {
-      timeSettings: true,
-      absenceCategories: { orderBy: { name: "asc" } },
-      holidays: { orderBy: { date: "asc" } },
-    },
-  });
+  const [workspace, timeSettings, absenceCategories, holidays] =
+    await Promise.all([
+      db.organization.findUnique({ where: { id: member.organizationId } }),
+      db.timeSettings.findUnique({
+        where: { organizationId: member.organizationId },
+      }),
+      db.absenceCategory.findMany({
+        where: { organizationId: member.organizationId },
+        orderBy: { name: "asc" },
+      }),
+      db.holiday.findMany({
+        where: { organizationId: member.organizationId },
+        orderBy: { date: "asc" },
+      }),
+    ]);
 
-  if (!organization) {
-    return NextResponse.json({ error: "Организация не найдена" }, { status: 404 });
+  if (!workspace) {
+    return NextResponse.json({ error: "Workspace Outline не найден" }, { status: 404 });
   }
 
   return NextResponse.json({
     organization: {
-      id: organization.id,
-      name: organization.name,
-      address: organization.address,
-      nameFormat: organization.nameFormat,
-      scheduleVisibility: organization.scheduleVisibility,
+      id: workspace.id,
+      name: workspace.name,
+      address: null,
+      nameFormat: "LASTNAME_FIRSTNAME",
+      scheduleVisibility: "ALL",
+      managedByOutline: true,
     },
-    timeSettings: organization.timeSettings ?? {
+    timeSettings: timeSettings ?? {
       whoCanUse: "ALL",
       watchAutoStop: false,
       warningsEnabled: false,
       warningsMaxHours: 10,
       useCategories: false,
     },
-    absenceCategories: organization.absenceCategories,
-    holidays: organization.holidays,
+    absenceCategories,
+    holidays,
   });
 }
 
 const updateSettingsSchema = z.object({
-  name: z.string().min(1).optional(),
-  address: z.string().optional(),
-  nameFormat: z
-    .enum([
-      "LASTNAME_FIRSTNAME",
-      "FIRSTNAME_LASTNAME",
-      "LASTNAME",
-      "FIRSTNAME",
-      "NICKNAME",
-    ])
-    .optional(),
-  scheduleVisibility: z.enum(["ALL", "OWN_ONLY"]).optional(),
   timeSettings: z
     .object({
       whoCanUse: z.enum(["ALL", "CHOOSE"]).optional(),
@@ -67,8 +63,6 @@ const updateSettingsSchema = z.object({
       useCategories: z.boolean().optional(),
     })
     .optional(),
-  holidayCountry: z.string().min(2).max(2).optional(),
-  holidayState: z.string().optional(),
 });
 
 export async function PATCH(request: NextRequest) {
@@ -90,30 +84,14 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  const data = parsed.data;
-  const organizationData: Record<string, unknown> = {};
-  if (data.name !== undefined) organizationData.name = data.name;
-  if (data.address !== undefined) organizationData.address = data.address;
-  if (data.nameFormat !== undefined) organizationData.nameFormat = data.nameFormat;
-  if (data.scheduleVisibility !== undefined) {
-    organizationData.scheduleVisibility = data.scheduleVisibility;
-  }
-
-  if (Object.keys(organizationData).length > 0) {
-    await db.organization.update({
-      where: { id: member.organizationId },
-      data: organizationData,
-    });
-  }
-
-  if (data.timeSettings) {
+  if (parsed.data.timeSettings) {
     await db.timeSettings.upsert({
       where: { organizationId: member.organizationId },
       create: {
         organizationId: member.organizationId,
-        ...data.timeSettings,
+        ...parsed.data.timeSettings,
       },
-      update: data.timeSettings,
+      update: parsed.data.timeSettings,
     });
   }
 
