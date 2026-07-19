@@ -4,17 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
+  BarChart3,
   CalendarDays,
   CalendarRange,
   Clock,
   Users,
-  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MobileNav } from "./mobile-nav";
 import { DivisionSwitcher } from "./division-switcher";
-import { ThemeToggle } from "./theme-toggle";
 
 export type ProjectMode = "schedule" | "vacations";
 export type ProjectNavItem = {
@@ -55,6 +53,11 @@ const vacationItems: ProjectNavItem[] = [
   },
 ];
 
+function itemIsActive(pathname: string, href: string) {
+  const root = `/${href.split("/")[1]}`;
+  return pathname === href || pathname.startsWith(`${root}/`) || pathname === root;
+}
+
 export function TopNav({ mode }: { mode: ProjectMode }) {
   const pathname = usePathname();
   const { data } = useQuery<DivisionsResponse>({
@@ -64,6 +67,7 @@ export function TopNav({ mode }: { mode: ProjectMode }) {
       if (!response.ok) throw new Error("Не удалось загрузить отделы");
       return response.json();
     },
+    staleTime: 30_000,
   });
 
   const items =
@@ -72,53 +76,47 @@ export function TopNav({ mode }: { mode: ProjectMode }) {
       : data?.canViewReports
         ? [...scheduleItems, reportingItem]
         : scheduleItems;
-  const homeHref = mode === "vacations" ? "/vacations" : "/schedule/employee";
-  const projectTitle = mode === "vacations" ? "Отпуска" : "График работы";
-  const HomeIcon = mode === "vacations" ? CalendarRange : CalendarDays;
-
-  function isActive(href: string) {
-    const segment = `/${href.split("/")[1]}`;
-    return pathname.startsWith(segment);
-  }
-
-  const itemClass = (active: boolean) =>
-    cn(
-      "relative flex min-h-8 items-center gap-1.5 rounded-sm px-2.5 text-sm font-medium transition-colors duration-150",
-      active
-        ? "bg-accent text-accent-foreground"
-        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-    );
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/88">
-      <div className="mx-auto flex h-12 max-w-[1600px] items-center gap-2 px-4 md:px-6 lg:px-8">
-        <MobileNav items={items} homeHref={homeHref} />
-
-        <Link
-          href={homeHref}
-          className="mr-3 flex min-w-0 items-center gap-2 rounded-sm px-1.5 py-1 text-sm font-semibold text-foreground hover:bg-secondary"
+    <header className="outline-native-toolbar sticky top-0 z-40">
+      <div className="mx-auto flex min-h-16 w-full max-w-[1600px] items-stretch gap-3 px-4 md:px-11">
+        <nav
+          aria-label={mode === "vacations" ? "Раздел отпусков" : "Разделы графика"}
+          className="outline-native-tabs min-w-0 flex-1 overflow-x-auto"
         >
-          <HomeIcon className="size-5 text-muted-foreground" />
-          <span className="hidden truncate sm:inline">{projectTitle}</span>
-        </Link>
+          <div className="flex h-full min-w-max items-stretch gap-1">
+            {items.map((item) => {
+              const Icon = item.icon;
+              const active = itemIsActive(pathname, item.href);
 
-        <nav className="hidden items-center gap-0.5 md:flex">
-          {items.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href);
-
-            return (
-              <Link key={item.key} href={item.href} className={itemClass(active)}>
-                <Icon className="size-4" />
-                <span className="hidden lg:inline">{item.label}</span>
-              </Link>
-            );
-          })}
+              return (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "outline-native-tab relative flex min-h-16 items-center gap-2 px-3 text-sm font-medium",
+                    active
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon className="size-4" strokeWidth={1.8} />
+                  <span>{item.label}</span>
+                  {active && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary"
+                    />
+                  )}
+                </Link>
+              );
+            })}
+          </div>
         </nav>
 
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center">
           <DivisionSwitcher />
-          <ThemeToggle />
         </div>
       </div>
     </header>
