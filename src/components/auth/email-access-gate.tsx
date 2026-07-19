@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { signIn, signOut } from "next-auth/react";
+import { getSession, signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Loader2, LockKeyhole } from "lucide-react";
 
@@ -11,20 +11,19 @@ interface EmailAccessGateProps {
   signature: string | null;
   token: string | null;
   email: string | null;
-  returnTo: string | null;
+  mode: "schedule" | "vacations";
 }
 
 type AccessState = "checking" | "blocked";
 
-const allowedDestinations = new Set([
-  "/schedule/employee",
-  "/employees/absences",
-]);
+function projectPath(mode: "schedule" | "vacations") {
+  return mode === "vacations" ? "/vacations" : "/schedule/employee";
+}
 
-function safeDestination(value: string | null) {
-  return value && allowedDestinations.has(value)
-    ? value
-    : "/schedule/employee";
+function setProjectMode(mode: "schedule" | "vacations") {
+  document.cookie = `schedule-project-mode=${mode}; Path=/; Max-Age=2592000; SameSite=Lax`;
+  document.cookie = "schedule-embedded=; Path=/; Max-Age=0; SameSite=Lax";
+  document.cookie = "schedule-last-path=; Path=/; Max-Age=0; SameSite=Lax";
 }
 
 export function EmailAccessGate({
@@ -33,7 +32,7 @@ export function EmailAccessGate({
   signature,
   token,
   email,
-  returnTo,
+  mode,
 }: EmailAccessGateProps) {
   const router = useRouter();
   const [state, setState] = useState<AccessState>("checking");
@@ -42,12 +41,26 @@ export function EmailAccessGate({
     let cancelled = false;
 
     async function authorize() {
-      await signOut({ redirect: false });
-
       const hasSignedIdentity = Boolean(userId && teamId && signature);
       if (!hasSignedIdentity && !token && !email) {
         if (!cancelled) setState("blocked");
         return;
+      }
+
+      const currentSession = await getSession();
+      const currentUserId = currentSession?.user?.id;
+
+      if (hasSignedIdentity && currentUserId === userId) {
+        if (!cancelled) {
+          setProjectMode(mode);
+          router.replace(projectPath(mode));
+          router.refresh();
+        }
+        return;
+      }
+
+      if (currentUserId && (!userId || currentUserId !== userId)) {
+        await signOut({ redirect: false });
       }
 
       const result = await signIn("credentials", {
@@ -66,10 +79,8 @@ export function EmailAccessGate({
         return;
       }
 
-      document.cookie =
-        "schedule-embedded=; Path=/; Max-Age=0; SameSite=Lax";
-
-      router.replace(safeDestination(returnTo));
+      setProjectMode(mode);
+      router.replace(projectPath(mode));
       router.refresh();
     }
 
@@ -80,14 +91,14 @@ export function EmailAccessGate({
     return () => {
       cancelled = true;
     };
-  }, [email, returnTo, router, signature, teamId, token, userId]);
+  }, [email, mode, router, signature, teamId, token, userId]);
 
   if (state === "checking") {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
         <div className="flex items-center gap-3 rounded-lg border bg-card px-5 py-4 text-sm text-muted-foreground shadow-sm">
           <Loader2 className="size-5 animate-spin" />
-          Синхронизация с Outline…
+          {mode === "vacations" ? "Открываем отпуска…" : "Открываем график…"}
         </div>
       </main>
     );
@@ -99,7 +110,7 @@ export function EmailAccessGate({
         <LockKeyhole className="mx-auto size-10 text-destructive" />
         <h1 className="mt-4 text-2xl font-bold">Доступ заблокирован</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Откройте проект графика работы через Outline.
+          Откройте нужный раздел через Outline.
         </p>
       </section>
     </main>

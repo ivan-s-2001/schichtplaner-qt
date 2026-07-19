@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Building2, Loader2 } from "lucide-react";
 
@@ -9,15 +10,17 @@ type Division = {
   title: string;
   description: string | null;
   color: string;
-  outlineGroupId: string;
+  outlineGroupId: string | null;
 };
 
 type DivisionsResponse = {
   divisions: Division[];
   selected: Division | null;
+  canViewReports: boolean;
 };
 
 export function DivisionSwitcher() {
+  const pathname = usePathname();
   const [changing, setChanging] = useState(false);
   const { data, isLoading } = useQuery<DivisionsResponse>({
     queryKey: ["outline-divisions"],
@@ -51,6 +54,12 @@ export function DivisionSwitcher() {
 
     if (!response.ok) {
       setChanging(false);
+      return;
+    }
+
+    const result = (await response.json()) as { canViewReports?: boolean };
+    if (pathname.startsWith("/reporting") && !result.canViewReports) {
+      window.location.assign("/schedule/employee");
       return;
     }
 
