@@ -1,51 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Mail, Send, StickyNote } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  ArrowLeft,
-  Mail,
-  Phone,
-  Pencil,
-  Check,
-  X,
-  Trash2,
-  Loader2,
-  StickyNote,
-  Send,
-  Clock,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useCurrentMember } from "@/lib/hooks/use-current-member";
 
 type EmployeeDetail = {
@@ -58,7 +23,8 @@ type EmployeeDetail = {
     id: string;
     firstName: string;
     lastName: string;
-    email: string;
+    patronymic: string | null;
+    email: string | null;
     phone: string | null;
     nickname: string | null;
     profileImage: string | null;
@@ -79,128 +45,21 @@ type Note = {
   };
 };
 
-function getInitials(firstName: string, lastName: string) {
+function initials(firstName: string, lastName: string) {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-}
-
-function getRoleLabel(role: string) {
-  switch (role) {
-    case "OWNER":
-      return "Владелец";
-    case "ADMIN":
-      return "Администратор";
-    case "MANAGER":
-      return "Руководитель";
-    default:
-      return "Сотрудники";
-  }
-}
-
-function getRoleBadgeColor(role: string) {
-  switch (role) {
-    case "OWNER":
-      return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200";
-    case "ADMIN":
-      return "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200";
-    case "MANAGER":
-      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200";
-    default:
-      return "";
-  }
-}
-
-// Inline editable field component
-function InlineEdit({
-  value,
-  onSave,
-  type = "text",
-  disabled = false,
-}: {
-  value: string;
-  onSave: (val: string) => void;
-  type?: string;
-  disabled?: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-
-  function handleSave() {
-    if (draft.trim() !== value) {
-      onSave(draft.trim());
-    }
-    setEditing(false);
-  }
-
-  function handleCancel() {
-    setDraft(value);
-    setEditing(false);
-  }
-
-  if (editing) {
-    return (
-      <div className="flex items-center gap-1">
-        <Input
-          type={type}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleSave();
-            if (e.key === "Escape") handleCancel();
-          }}
-          autoFocus
-          className="h-7 text-sm"
-        />
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={handleSave}
-          className="text-emerald-600"
-        >
-          <Check className="size-3" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={handleCancel}
-          className="text-muted-foreground"
-        >
-          <X className="size-3" />
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="group flex items-center gap-1">
-      <span className="text-sm">{value || "-"}</span>
-      {!disabled && (
-        <button
-          onClick={() => {
-            setDraft(value);
-            setEditing(true);
-          }}
-          className="invisible group-hover:visible text-muted-foreground hover:text-foreground"
-        >
-          <Pencil className="size-3" />
-        </button>
-      )}
-    </div>
-  );
 }
 
 export function EmployeeDetail({ memberId }: { memberId: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: currentMember } = useCurrentMember();
-  const [deleteOpen, setDeleteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
 
-  const isAdmin =
-    currentMember?.role === "OWNER" || currentMember?.role === "ADMIN";
-  const isManagerPlus =
-    isAdmin || currentMember?.role === "MANAGER";
+  const canManageNotes =
+    currentMember?.role === "OWNER" ||
+    currentMember?.role === "ADMIN" ||
+    currentMember?.role === "MANAGER";
 
-  // Fetch employee detail
   const {
     data: employee,
     isLoading,
@@ -208,504 +67,159 @@ export function EmployeeDetail({ memberId }: { memberId: string }) {
   } = useQuery<EmployeeDetail>({
     queryKey: ["employee", memberId],
     queryFn: async () => {
-      const res = await fetch(`/api/employees/${memberId}`);
-      if (!res.ok) throw new Error("Mitarbeiter nicht gefunden");
-      return res.json();
+      const response = await fetch(`/api/employees/${memberId}`);
+      if (!response.ok) throw new Error("Сотрудник не найден");
+      return response.json();
     },
   });
 
-  // Fetch notes
-  const { data: notes } = useQuery<Note[]>({
+  const { data: notes = [] } = useQuery<Note[]>({
     queryKey: ["employee-notes", memberId],
     queryFn: async () => {
-      const res = await fetch(`/api/employees/${memberId}/notes`);
-      if (!res.ok) return [];
-      return res.json();
+      const response = await fetch(`/api/employees/${memberId}/notes`);
+      if (!response.ok) return [];
+      return response.json();
     },
-    enabled: isManagerPlus,
+    enabled: canManageNotes,
   });
 
-  // Update employee mutation
-  const updateMutation = useMutation({
-    mutationFn: async (data: Record<string, string>) => {
-      const res = await fetch(`/api/employees/${memberId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Ошибка сохранения");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      toast.success("Gespeichert");
-      queryClient.invalidateQueries({ queryKey: ["employee", memberId] });
-      queryClient.invalidateQueries({ queryKey: ["employees"] });
-    },
-    onError: (err: Error) => {
-      toast.error(err.message);
-    },
-  });
-
-  // Change role mutation
-  const roleMutation = useMutation({
-    mutationFn: async (role: string) => {
-      const res = await fetch(`/api/employees/${memberId}/role`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Fehler beim Aendern der Rolle");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      toast.success("Rolle geaendert");
-      queryClient.invalidateQueries({ queryKey: ["employee", memberId] });
-      queryClient.invalidateQueries({ queryKey: ["employees"] });
-    },
-    onError: (err: Error) => {
-      toast.error(err.message);
-    },
-  });
-
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/employees/${memberId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Fehler beim Deaktivieren");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      toast.success("Mitarbeiter deaktiviert");
-      queryClient.invalidateQueries({ queryKey: ["employees"] });
-      router.push("/employees");
-    },
-    onError: (err: Error) => {
-      toast.error(err.message);
-    },
-  });
-
-  // Create note mutation
-  const noteMutation = useMutation({
+  const addNoteMutation = useMutation({
     mutationFn: async (text: string) => {
-      const res = await fetch(`/api/employees/${memberId}/notes`, {
+      const response = await fetch(`/api/employees/${memberId}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Ошибка сохранения der Notiz");
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(result?.error || "Не удалось сохранить заметку");
       }
-      return res.json();
     },
-    onSuccess: () => {
-      toast.success("Notiz gespeichert");
+    onSuccess: async () => {
       setNoteText("");
-      queryClient.invalidateQueries({
+      toast.success("Заметка сохранена");
+      await queryClient.invalidateQueries({
         queryKey: ["employee-notes", memberId],
       });
     },
-    onError: (err: Error) => {
-      toast.error(err.message);
-    },
+    onError: (mutationError: Error) => toast.error(mutationError.message),
   });
 
   if (isLoading) {
-    return <EmployeeDetailSkeleton />;
-  }
-
-  if (error || !employee) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" onClick={() => router.push("/employees")}>
-          <ArrowLeft className="size-4" />
-          Zurueck
-        </Button>
-        <Card className="p-12 text-center">
-          <p className="text-destructive">Mitarbeiter nicht gefunden.</p>
+        <Skeleton className="h-8 w-48" />
+        <Card className="p-6">
+          <div className="flex items-center gap-4">
+            <Skeleton className="size-20 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-6 w-64" />
+              <Skeleton className="h-4 w-48" />
+            </div>
+          </div>
         </Card>
       </div>
     );
   }
 
-  const isSelf = employee.user.id === currentMember?.user?.id;
-  const canEdit = isAdmin || isSelf;
-  const canChangeRole = isAdmin && !isSelf && employee.role !== "OWNER";
-  const canDelete = isAdmin && !isSelf && employee.role !== "OWNER";
+  if (error || !employee) {
+    return (
+      <Card className="p-8 text-center text-destructive">
+        Сотрудник не найден.
+      </Card>
+    );
+  }
+
+  const displayName = [
+    employee.user.lastName,
+    employee.user.firstName,
+    employee.user.patronymic,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div className="space-y-6">
-      {/* Back button */}
-      <Button variant="ghost" onClick={() => router.push("/employees")}>
+    <div className="space-y-5">
+      <Button variant="ghost" size="sm" onClick={() => router.back()}>
         <ArrowLeft className="size-4" />
-        Zurueck zur Liste
+        Назад
       </Button>
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Avatar size="lg">
+      <Card className="p-6">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+          <Avatar className="size-20">
             {employee.user.profileImage && (
               <AvatarImage src={employee.user.profileImage} />
             )}
-            <AvatarFallback className="text-lg">
-              {getInitials(employee.user.firstName, employee.user.lastName)}
+            <AvatarFallback className="text-xl">
+              {initials(employee.user.firstName, employee.user.lastName)}
             </AvatarFallback>
           </Avatar>
-          <div>
-            <h1 className="text-2xl font-bold">
-              {employee.user.lastName}, {employee.user.firstName}
-            </h1>
-            <div className="flex items-center gap-2 mt-1">
-              <Badge className={getRoleBadgeColor(employee.role)}>
-                {getRoleLabel(employee.role)}
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate text-2xl font-bold">{displayName}</h1>
+              <Badge variant="secondary">
+                {employee.role === "ADMIN"
+                  ? "Администратор Outline"
+                  : "Сотрудник"}
               </Badge>
-              {!employee.isActive && (
-                <Badge variant="destructive">Неактивен</Badge>
-              )}
-              {employee.isActive && !employee.isActivated && (
-                <Badge
-                  variant="outline"
-                  className="border-amber-500 text-amber-600"
-                >
-                  Не активированы
-                </Badge>
-              )}
+            </div>
+            <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+              <Mail className="size-4" />
+              {employee.user.email ?? "Email не указан"}
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">
+              UUID Outline: {employee.user.id}
             </div>
           </div>
         </div>
+      </Card>
 
-        {/* Actions dropdown */}
-        {(canChangeRole || canDelete) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">Действия</Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {canDelete && employee.isActive && (
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => setDeleteOpen(true)}
-                >
-                  <Trash2 className="size-4" />
-                  Deaktivieren
-                </DropdownMenuItem>
-              )}
-              {canDelete && !employee.isActive && (
-                <DropdownMenuItem
-                  onClick={() => {
-                    // Reactivate by updating isActive through a custom approach
-                    // For now we use the PATCH endpoint concept
-                    toast.info("Reaktivierung noch nicht implementiert");
-                  }}
-                >
-                  Reaktivieren
-                </DropdownMenuItem>
-              )}
-              {canChangeRole && (
-                <>
-                  <DropdownMenuSeparator />
-                  {["ADMIN", "MANAGER", "EMPLOYEE"]
-                    .filter((r) => r !== employee.role)
-                    .map((r) => (
-                      <DropdownMenuItem
-                        key={r}
-                        onClick={() => roleMutation.mutate(r)}
-                      >
-                        Rolle zu {getRoleLabel(r)} aendern
-                      </DropdownMenuItem>
-                    ))}
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
+      <Card className="border-dashed p-4 text-sm text-muted-foreground">
+        Личные данные, роль и членство в отделах изменяются в Outline. Расписание
+        только читает профиль по UUID.
+      </Card>
 
-      {/* Content Grid */}
-      <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-        {/* Left column - Contact info + Notes */}
-        <div className="space-y-6">
-          {/* Contact Info */}
-          <Card className="p-5 space-y-4">
-            <h2 className="text-sm font-semibold uppercase text-muted-foreground tracking-wide">
-              Kontaktdaten
-            </h2>
+      {canManageNotes && (
+        <Card className="space-y-4 p-5">
+          <div className="flex items-center gap-2">
+            <StickyNote className="size-5 text-muted-foreground" />
+            <h2 className="font-semibold">Служебные заметки расписания</h2>
+          </div>
 
-            <div className="space-y-3">
-              {/* Name */}
-              <div className="grid grid-cols-[120px_1fr] items-center">
-                <span className="text-sm text-muted-foreground">Имя</span>
-                <InlineEdit
-                  value={employee.user.firstName}
-                  onSave={(v) => updateMutation.mutate({ firstName: v })}
-                  disabled={!canEdit}
-                />
-              </div>
-              <div className="grid grid-cols-[120px_1fr] items-center">
-                <span className="text-sm text-muted-foreground">Фамилия</span>
-                <InlineEdit
-                  value={employee.user.lastName}
-                  onSave={(v) => updateMutation.mutate({ lastName: v })}
-                  disabled={!canEdit}
-                />
-              </div>
-              <div className="grid grid-cols-[120px_1fr] items-center">
-                <span className="text-sm text-muted-foreground">Spitzname</span>
-                <InlineEdit
-                  value={employee.user.nickname || ""}
-                  onSave={(v) => updateMutation.mutate({ nickname: v })}
-                  disabled={!canEdit}
-                />
-              </div>
-
-              {/* Email */}
-              <div className="grid grid-cols-[120px_1fr] items-center">
-                <span className="text-sm text-muted-foreground">
-                  <Mail className="inline size-3.5 mr-1" />
-                  E-Mail
-                </span>
-                <InlineEdit
-                  value={employee.user.email}
-                  onSave={(v) => updateMutation.mutate({ email: v })}
-                  type="email"
-                  disabled={!canEdit}
-                />
-              </div>
-
-              {/* Phone */}
-              <div className="grid grid-cols-[120px_1fr] items-center">
-                <span className="text-sm text-muted-foreground">
-                  <Phone className="inline size-3.5 mr-1" />
-                  Telefon
-                </span>
-                <InlineEdit
-                  value={employee.user.phone || ""}
-                  onSave={(v) => updateMutation.mutate({ phone: v })}
-                  type="tel"
-                  disabled={!canEdit}
-                />
-              </div>
-            </div>
-
-            {/* Role change (inline) */}
-            {canChangeRole && (
-              <div className="grid grid-cols-[120px_1fr] items-center pt-2 border-t">
-                <span className="text-sm text-muted-foreground">Роль</span>
-                <Select
-                  value={employee.role}
-                  onValueChange={(v) => roleMutation.mutate(v)}
-                  disabled={roleMutation.isPending}
-                >
-                  <SelectTrigger className="w-[160px] h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ADMIN">Администратор</SelectItem>
-                    <SelectItem value="MANAGER">Руководитель</SelectItem>
-                    <SelectItem value="EMPLOYEE">Сотрудники</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </Card>
-
-          {/* Quick Navigation */}
-          <Card className="p-5 space-y-3">
-            <h2 className="text-sm font-semibold uppercase text-muted-foreground tracking-wide">
-              Navigation
-            </h2>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" disabled>
-                <Clock className="size-4" />
-                Stunden
-              </Button>
-            </div>
-          </Card>
-
-          {/* Notes Section */}
-          {isManagerPlus && (
-            <Card className="p-5 space-y-4">
-              <h2 className="text-sm font-semibold uppercase text-muted-foreground tracking-wide">
-                <StickyNote className="inline size-3.5 mr-1" />
-                Notizen
-              </h2>
-
-              {/* Add note form */}
-              <div className="flex gap-2">
-                <Textarea
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  placeholder="Notiz hinzufuegen..."
-                  className="min-h-[60px]"
-                />
-                <Button
-                  size="icon"
-                  variant="outline"
-                  onClick={() => {
-                    if (noteText.trim()) {
-                      noteMutation.mutate(noteText.trim());
-                    }
-                  }}
-                  disabled={!noteText.trim() || noteMutation.isPending}
-                >
-                  {noteMutation.isPending ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Send className="size-4" />
-                  )}
-                </Button>
-              </div>
-
-              {/* Notes list */}
-              {notes && notes.length > 0 ? (
-                <div className="space-y-3">
-                  {notes.map((note) => (
-                    <div
-                      key={note.id}
-                      className="rounded-md border p-3 text-sm"
-                    >
-                      <p className="whitespace-pre-wrap">{note.text}</p>
-                      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>
-                          {note.author.firstName} {note.author.lastName}
-                        </span>
-                        <span>-</span>
-                        <span>
-                          {new Date(note.createdAt).toLocaleDateString("ru-RU", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Noch keine Notizen vorhanden.
-                </p>
-              )}
-            </Card>
-          )}
-        </div>
-
-        {/* Right column - E-Dash placeholder */}
-        <div className="space-y-6">
-          <Card className="p-5">
-            <h2 className="text-sm font-semibold uppercase text-muted-foreground tracking-wide mb-4">
-              Monatsuebersicht
-            </h2>
-            <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-              <Clock className="size-10 opacity-30 mb-3" />
-              <p className="text-sm font-medium">E-Dash</p>
-              <p className="text-xs mt-1">
-                Stundenauswertung wird mit dem Zeiterfassungsmodul verfuegbar.
-              </p>
-            </div>
-          </Card>
-
-          {/* Member Meta */}
-          <Card className="p-5 space-y-3">
-            <h2 className="text-sm font-semibold uppercase text-muted-foreground tracking-wide">
-              Mitgliedschaft
-            </h2>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Beigetreten</span>
-                <span>
-                  {new Date(employee.joinedAt).toLocaleDateString("ru-RU", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                  })}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Статус</span>
-                <span>
-                  {employee.isActive ? "Активен" : "Неактивен"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Freigeschaltet</span>
-                <span>{employee.isActivated ? "Да" : "Нет"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Member-ID</span>
-                <span className="font-mono text-xs text-muted-foreground">
-                  {employee.id}
-                </span>
-              </div>
-            </div>
-          </Card>
-        </div>
-      </div>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Mitarbeiter deaktivieren?</DialogTitle>
-            <DialogDescription>
-              {employee.user.firstName} {employee.user.lastName} wird
-              deaktiviert und hat keinen Zugriff mehr auf die Organisation. Diese
-              Aktion kann rueckgaengig gemacht werden.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
-              Abbrechen
-            </Button>
+          <div className="flex gap-2">
+            <Textarea
+              value={noteText}
+              onChange={(event) => setNoteText(event.target.value)}
+              placeholder="Добавить служебную заметку"
+              rows={2}
+            />
             <Button
-              variant="destructive"
-              onClick={() => {
-                deleteMutation.mutate();
-                setDeleteOpen(false);
-              }}
-              disabled={deleteMutation.isPending}
+              size="icon"
+              disabled={!noteText.trim() || addNoteMutation.isPending}
+              onClick={() => addNoteMutation.mutate(noteText.trim())}
             >
-              {deleteMutation.isPending && (
-                <Loader2 className="size-4 animate-spin" />
-              )}
-              Deaktivieren
+              <Send className="size-4" />
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
+          </div>
 
-function EmployeeDetailSkeleton() {
-  return (
-    <div className="space-y-6">
-      <Skeleton className="h-9 w-32" />
-      <div className="flex items-center gap-4">
-        <Skeleton className="size-10 rounded-full" />
-        <div className="space-y-2">
-          <Skeleton className="h-7 w-64" />
-          <Skeleton className="h-5 w-24 rounded-full" />
-        </div>
-      </div>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Skeleton className="h-80" />
-        <Skeleton className="h-80" />
-      </div>
+          <div className="space-y-2">
+            {notes.length === 0 && (
+              <p className="text-sm text-muted-foreground">Заметок нет.</p>
+            )}
+            {notes.map((note) => (
+              <div key={note.id} className="rounded-md border p-3">
+                <p className="whitespace-pre-wrap text-sm">{note.text}</p>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  {note.author.lastName} {note.author.firstName} ·{" "}
+                  {new Date(note.createdAt).toLocaleString("ru-RU")}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
