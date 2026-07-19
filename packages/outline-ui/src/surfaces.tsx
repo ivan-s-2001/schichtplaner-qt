@@ -28,7 +28,7 @@ export function CardAction({ className, ...props }: React.ComponentProps<"div">)
   return (
     <div
       data-slot="card-action"
-      className={cx("col-start-2 row-span-2 row-start-1 self-start justify-self-end", className)}
+      className={cx("qto-card-action", className)}
       {...props}
     />
   );
@@ -68,14 +68,11 @@ export function Badge({
       data-variant={resolvedVariant}
       className={cx(
         "qto-badge",
-        resolvedVariant === "default" &&
-          "border-transparent bg-[var(--qto-accent)] text-[var(--qto-accent-text)]",
-        resolvedVariant === "destructive" &&
-          "border-transparent bg-[var(--qto-danger)] text-white",
-        resolvedVariant === "outline" && "bg-[var(--qto-background)]",
-        resolvedVariant === "ghost" && "border-transparent bg-transparent",
-        resolvedVariant === "link" &&
-          "border-transparent bg-transparent text-[var(--qto-accent)] underline-offset-4 hover:underline",
+        resolvedVariant === "default" && "qto-badge--primary",
+        resolvedVariant === "destructive" && "qto-badge--danger",
+        resolvedVariant === "outline" && "qto-badge--outline",
+        resolvedVariant === "ghost" && "qto-badge--ghost",
+        resolvedVariant === "link" && "qto-badge--link",
         className
       )}
       {...props}
