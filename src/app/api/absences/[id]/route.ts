@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
+import { isVacationCategoryName } from "@/lib/vacation";
 
-// PATCH /api/absences/[id] - Update absence (approve/decline/edit)
 const updateAbsenceSchema = z.object({
   status: z.enum(["PENDING", "APPROVED", "DECLINED"]).optional(),
   dateFrom: z.string().optional(),
@@ -23,18 +23,21 @@ export async function PATCH(
 
   const { id } = await params;
   const isAdmin = isAdminOrAbove(member.role);
-
-  // Find the absence
   const absence = await db.absence.findUnique({
     where: { id },
-    include: { user: true },
+    include: { user: true, category: true },
   });
 
   if (!absence) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (isVacationCategoryName(absence.category.name)) {
+    return NextResponse.json(
+      { error: "Отпуск изменяется на отдельной странице «Отпуск»" },
+      { status: 409 }
+    );
+  }
 
-  // Verify user is in the same org
   const orgMember = await db.organizationMember.findFirst({
     where: {
       organizationId: member.organizationId,
@@ -62,8 +65,6 @@ export async function PATCH(
   }
 
   const data = parsed.data;
-
-  // Only admin+ can approve/decline
   if (data.status && (data.status === "APPROVED" || data.status === "DECLINED")) {
     if (!isAdmin) {
       return NextResponse.json(
@@ -73,7 +74,6 @@ export async function PATCH(
     }
   }
 
-  // Non-admins can only edit their own PENDING absences
   if (!isAdmin) {
     if (absence.userId !== member.user.id) {
       return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
@@ -86,23 +86,16 @@ export async function PATCH(
     }
   }
 
-  // Build update data
   const updateData: Record<string, unknown> = {};
-
-  if (data.status !== undefined) {
-    updateData.status = data.status;
-  }
+  if (data.status !== undefined) updateData.status = data.status;
   if (data.dateFrom !== undefined) {
     updateData.dateFrom = new Date(data.dateFrom + "T00:00:00.000Z");
   }
   if (data.dateTo !== undefined) {
     updateData.dateTo = new Date(data.dateTo + "T00:00:00.000Z");
   }
-  if (data.note !== undefined) {
-    updateData.note = data.note;
-  }
+  if (data.note !== undefined) updateData.note = data.note;
   if (data.categoryId !== undefined) {
-    // Verify category belongs to org
     const category = await db.absenceCategory.findFirst({
       where: {
         id: data.categoryId,
@@ -110,9 +103,12 @@ export async function PATCH(
       },
     });
     if (!category) {
+      return NextResponse.json({ error: "Category not found" }, { status: 404 });
+    }
+    if (isVacationCategoryName(category.name)) {
       return NextResponse.json(
-        { error: "Category not found" },
-        { status: 404 }
+        { error: "Отпуск добавляется на отдельной странице «Отпуск»" },
+        { status: 409 }
       );
     }
     updateData.categoryId = data.categoryId;
@@ -144,7 +140,6 @@ export async function PATCH(
   return NextResponse.json({ absence: updated });
 }
 
-// DELETE /api/absences/[id] - Delete absence
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -156,14 +151,20 @@ export async function DELETE(
 
   const { id } = await params;
   const isAdmin = isAdminOrAbove(member.role);
-
-  // Find the absence
-  const absence = await db.absence.findUnique({ where: { id } });
+  const absence = await db.absence.findUnique({
+    where: { id },
+    include: { category: true },
+  });
   if (!absence) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (isVacationCategoryName(absence.category.name)) {
+    return NextResponse.json(
+      { error: "Отпуск удаляется на отдельной странице «Отпуск»" },
+      { status: 409 }
+    );
+  }
 
-  // Verify user is in the same org
   const orgMember = await db.organizationMember.findFirst({
     where: {
       organizationId: member.organizationId,
@@ -175,7 +176,6 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Admin+ can always delete. Employees can delete their own PENDING absences only.
   if (!isAdmin) {
     if (absence.userId !== member.user.id) {
       return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
@@ -189,6 +189,5 @@ export async function DELETE(
   }
 
   await db.absence.delete({ where: { id } });
-
   return NextResponse.json({ success: true });
 }
