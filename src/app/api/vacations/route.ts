@@ -60,7 +60,10 @@ export async function GET(request: NextRequest) {
     member.organizationId
   );
   if (!division) {
-    return NextResponse.json({ error: "Нет доступного подразделения" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Нет доступного подразделения" },
+      { status: 403 }
+    );
   }
 
   const year = parseYear(request.nextUrl.searchParams.get("year"));
@@ -109,7 +112,9 @@ export async function GET(request: NextRequest) {
       })
     : [];
 
-  const vacationCategoryIds = await getVacationCategoryIds(member.organizationId);
+  const vacationCategoryIds = await getVacationCategoryIds(
+    member.organizationId
+  );
   const absences =
     visibleUserIds.length && vacationCategoryIds.length
       ? await db.absence.findMany({
@@ -148,7 +153,8 @@ export async function GET(request: NextRequest) {
           0
         );
       const allowanceDays =
-        allowanceByUser.get(organizationMember.userId) ?? DEFAULT_VACATION_DAYS;
+        allowanceByUser.get(organizationMember.userId) ??
+        DEFAULT_VACATION_DAYS;
 
       return {
         userId: organizationMember.userId,
@@ -191,7 +197,10 @@ export async function GET(request: NextRequest) {
         (total, employee) => total + employee.allowanceDays,
         0
       ),
-      usedDays: employees.reduce((total, employee) => total + employee.usedDays, 0),
+      usedDays: employees.reduce(
+        (total, employee) => total + employee.usedDays,
+        0
+      ),
       remainingDays: employees.reduce(
         (total, employee) => total + employee.remainingDays,
         0
@@ -205,7 +214,7 @@ const createVacationSchema = z.object({
   year: z.number().int().min(2000).max(2100),
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  note: z.string().trim().max(500).optional(),
+  note: z.string().trim().max(500).nullable().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -220,11 +229,17 @@ export async function POST(request: NextRequest) {
     member.organizationId
   );
   if (!division) {
-    return NextResponse.json({ error: "Нет доступного подразделения" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Нет доступного подразделения" },
+      { status: 403 }
+    );
   }
   if (!isAdminOrAbove(member.role) && !division.isManager) {
     return NextResponse.json(
-      { error: "Отпуск назначает руководитель подразделения или администратор" },
+      {
+        error:
+          "Отпуск назначает руководитель подразделения или администратор",
+      },
       { status: 403 }
     );
   }
@@ -269,10 +284,14 @@ export async function POST(request: NextRequest) {
       select: { id: true },
     });
     if (overlapping) {
-      throw new Error("В выбранном периоде уже есть отпуск или другое отсутствие");
+      throw new Error(
+        "В выбранном периоде уже есть отпуск или другое отсутствие"
+      );
     }
 
-    const vacationCategoryIds = await getVacationCategoryIds(member.organizationId);
+    const vacationCategoryIds = await getVacationCategoryIds(
+      member.organizationId
+    );
     const existingVacations = vacationCategoryIds.length
       ? await db.absence.findMany({
           where: {
@@ -296,7 +315,11 @@ export async function POST(request: NextRequest) {
         ),
       0
     );
-    const allowanceDays = await getAllowance(member.organizationId, userId, year);
+    const allowanceDays = await getAllowance(
+      member.organizationId,
+      userId,
+      year
+    );
     if (usedDays + requestedDays > allowanceDays) {
       throw new Error(
         `Недостаточно дней отпуска: доступно ${Math.max(
@@ -359,7 +382,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : "Не удалось добавить отпуск",
+          error instanceof Error
+            ? error.message
+            : "Не удалось добавить отпуск",
       },
       { status: 409 }
     );
@@ -384,11 +409,17 @@ export async function PUT(request: NextRequest) {
     member.organizationId
   );
   if (!division) {
-    return NextResponse.json({ error: "Нет доступного подразделения" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Нет доступного подразделения" },
+      { status: 403 }
+    );
   }
   if (!isAdminOrAbove(member.role) && !division.isManager) {
     return NextResponse.json(
-      { error: "Изменять лимит может руководитель подразделения или администратор" },
+      {
+        error:
+          "Изменять лимит может руководитель подразделения или администратор",
+      },
       { status: 403 }
     );
   }
