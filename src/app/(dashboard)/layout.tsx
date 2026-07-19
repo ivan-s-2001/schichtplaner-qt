@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import { TopNav, type ProjectMode } from "@/components/layout/top-nav";
-import { OutlineThemeBridge } from "@/components/layout/outline-theme-bridge";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { SocketProvider } from "@/components/providers/socket-provider";
@@ -27,7 +26,6 @@ export default async function DashboardLayout({
       >
         <QueryProvider>
           <SocketProvider>
-            <OutlineThemeBridge />
             <div
               data-outline-native-shell
               className="min-h-screen bg-background text-foreground"
