@@ -41,6 +41,15 @@ type EmployeesResponse = {
   members: EmployeeMember[];
 };
 
+type DivisionResponse = {
+  selected: {
+    id: string;
+    title: string;
+    scheduleMode: "SHIFT" | "STABLE";
+    isManager: boolean;
+  } | null;
+};
+
 type HolidayCalendarResponse = {
   nonWorkingDates: string[];
 };
@@ -50,7 +59,6 @@ type EmployeeRow = {
   assignments: Record<number, ShiftAssignment | null>;
 };
 
-const CARE_EMAIL_SUFFIX = "@care.qt.local";
 const DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
 function getInitials(firstName: string, lastName: string): string {
@@ -70,30 +78,21 @@ function formatHours(value: number): string {
   });
 }
 
-function isLegacyOvertime(shift: ShiftAssignment["shift"]): boolean {
-  const text = `${shift.title ?? ""} ${shift.description ?? ""}`;
-  return /переработ|(?:^|\s)П(?:\s|$)/i.test(text);
-}
-
 function isDateInsideAbsence(date: Date, absence: ScheduleAbsence): boolean {
   const key = format(date, "yyyy-MM-dd");
   return key >= absence.dateFrom.slice(0, 10) && key <= absence.dateTo.slice(0, 10);
 }
 
-function absenceKind(absence: ScheduleAbsence): "VACATION" | "SICK" {
+function absenceLabel(absence: ScheduleAbsence): string {
   return absence.category.name.toLowerCase().includes("больнич")
-    ? "SICK"
-    : "VACATION";
+    ? "Больничный"
+    : "Отпуск";
 }
 
 export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps) {
   const queryClient = useQueryClient();
   const { data: currentMember } = useCurrentMember();
-  const canEdit =
-    currentMember?.role === "OWNER" ||
-    currentMember?.role === "ADMIN" ||
-    currentMember?.role === "MANAGER";
-
+  const currentUserId = currentMember?.user?.id;
   const [editorTarget, setEditorTarget] =
     useState<ShiftAssignmentTarget | null>(null);
 
@@ -102,11 +101,7 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
     [weekDates]
   );
 
-  const {
-    data: scheduleData,
-    isLoading: scheduleLoading,
-    error: scheduleError,
-  } = useQuery<{ schedule: ScheduleData }>({
+  const scheduleQuery = useQuery<{ schedule: ScheduleData }>({
     queryKey: ["schedule", weekNumber, year],
     queryFn: async () => {
       const response = await fetch(
@@ -117,11 +112,7 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
     },
   });
 
-  const {
-    data: employeesData,
-    isLoading: employeesLoading,
-    error: employeesError,
-  } = useQuery<EmployeesResponse>({
+  const employeesQuery = useQuery<EmployeesResponse>({
     queryKey: ["employees", "schedule-grid"],
     queryFn: async () => {
       const response = await fetch("/api/employees?status=all");
@@ -130,7 +121,16 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
     },
   });
 
-  const { data: holidayCalendars } = useQuery<HolidayCalendarResponse[]>({
+  const divisionQuery = useQuery<DivisionResponse>({
+    queryKey: ["outline-divisions"],
+    queryFn: async () => {
+      const response = await fetch("/api/outline/divisions");
+      if (!response.ok) throw new Error("Не удалось определить подразделение");
+      return response.json();
+    },
+  });
+
+  const holidayQuery = useQuery<HolidayCalendarResponse[]>({
     queryKey: ["holiday-calendar", ...calendarYears],
     queryFn: async () =>
       Promise.all(
@@ -144,32 +144,28 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
       ),
   });
 
+  const canManage =
+    currentMember?.role === "OWNER" ||
+    currentMember?.role === "ADMIN" ||
+    divisionQuery.data?.selected?.isManager === true;
+  const canEditTarget =
+    canManage || editorTarget?.user.id === currentUserId;
+
   const nonWorkingDates = useMemo(
     () =>
       new Set(
-        (holidayCalendars ?? []).flatMap(
+        (holidayQuery.data ?? []).flatMap(
           (calendar) => calendar.nonWorkingDates ?? []
         )
       ),
-    [holidayCalendars]
+    [holidayQuery.data]
   );
 
-  const schedule = scheduleData?.schedule;
+  const schedule = scheduleQuery.data?.schedule;
   const shifts = schedule?.shifts ?? [];
-
-  const visibleMembers = useMemo(() => {
-    const active = (employeesData?.members ?? []).filter(
-      (member) => member.isActive !== false && member.role !== "OWNER"
-    );
-    const care = active.filter((member) =>
-      member.user.email.toLowerCase().endsWith(CARE_EMAIL_SUFFIX)
-    );
-    return care.length > 0 ? care : active;
-  }, [employeesData]);
 
   const rows = useMemo<EmployeeRow[]>(() => {
     const assignments = new Map<string, ShiftAssignment>();
-
     for (const shift of shifts) {
       for (const booking of shift.bookings) {
         const key = `${booking.userId}:${shift.dayOfWeek}`;
@@ -177,15 +173,22 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
       }
     }
 
-    return visibleMembers.map((member) => {
-      const dayAssignments = {} as Record<number, ShiftAssignment | null>;
-      for (let day = 1; day <= 7; day += 1) {
-        dayAssignments[day] =
-          assignments.get(`${member.user.id}:${day}`) ?? null;
-      }
-      return { user: member.user, assignments: dayAssignments };
-    });
-  }, [shifts, visibleMembers]);
+    return (employeesQuery.data?.members ?? [])
+      .filter((member) => member.isActive !== false && member.role !== "OWNER")
+      .map((member) => {
+        const dayAssignments = {} as Record<number, ShiftAssignment | null>;
+        for (let day = 1; day <= 7; day += 1) {
+          dayAssignments[day] =
+            assignments.get(`${member.user.id}:${day}`) ?? null;
+        }
+        return { user: member.user, assignments: dayAssignments };
+      })
+      .sort((left, right) => {
+        if (left.user.id === currentUserId) return -1;
+        if (right.user.id === currentUserId) return 1;
+        return getFullName(left.user).localeCompare(getFullName(right.user), "ru");
+      });
+  }, [employeesQuery.data?.members, shifts, currentUserId]);
 
   const dayNotesByDay = useMemo(() => {
     const result = new Map<number, ScheduleDayNote[]>();
@@ -229,7 +232,8 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
     absence: ScheduleAbsence | null
   ) {
     if (!schedule) return;
-    if (!assignment && !dayOff && !absence && !canEdit) return;
+    const mayEdit = canManage || user.id === currentUserId;
+    if (!mayEdit && !assignment && !dayOff && !absence) return;
 
     setEditorTarget({
       scheduleId: schedule.id,
@@ -242,11 +246,14 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
     });
   }
 
-  const isLoading = scheduleLoading || employeesLoading;
-  const error = scheduleError || employeesError;
+  const loading =
+    scheduleQuery.isLoading ||
+    employeesQuery.isLoading ||
+    divisionQuery.isLoading;
+  const error =
+    scheduleQuery.error || employeesQuery.error || divisionQuery.error;
 
-  if (isLoading) return <EmployeeGridSkeleton />;
-
+  if (loading) return <EmployeeGridSkeleton />;
   if (error || !schedule) {
     return (
       <div className="rounded-lg border p-8 text-center text-destructive">
@@ -254,11 +261,10 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
       </div>
     );
   }
-
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border p-12 text-center text-muted-foreground">
-        В организации пока нет активных сотрудников.
+        В подразделение пока не назначены сотрудники.
       </div>
     );
   }
@@ -278,7 +284,6 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
                 const nonWorking = nonWorkingDates.has(
                   format(date, "yyyy-MM-dd")
                 );
-
                 return (
                   <th
                     key={date.toISOString()}
@@ -298,7 +303,7 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
                       date={date}
                       dayName={DAY_NAMES[index]}
                       notes={dayNotesByDay.get(dayOfWeek) ?? []}
-                      canEdit={canEdit}
+                      canEdit={canManage}
                       onChanged={invalidateSchedule}
                     />
                   </th>
@@ -309,160 +314,23 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
 
           <tbody>
             {rows.map((row) => {
-              const cells = [];
+              const isCurrent = row.user.id === currentUserId;
               const userAbsences = absencesByUser.get(row.user.id) ?? [];
-              let index = 0;
-
-              while (index < weekDates.length) {
-                const date = weekDates[index];
-                const dayOfWeek = index + 1;
-                const absence =
-                  userAbsences.find((item) => isDateInsideAbsence(date, item)) ??
-                  null;
-
-                if (absence) {
-                  let span = 1;
-                  while (
-                    index + span < weekDates.length &&
-                    isDateInsideAbsence(weekDates[index + span], absence)
-                  ) {
-                    span += 1;
-                  }
-
-                  const kind = absenceKind(absence);
-                  const label = kind === "VACATION" ? "Отпуск" : "Больничный";
-                  const period = `${format(new Date(absence.dateFrom), "d MMMM", {
-                    locale: ru,
-                  })} — ${format(new Date(absence.dateTo), "d MMMM yyyy", {
-                    locale: ru,
-                  })}`;
-
-                  cells.push(
-                    <td
-                      key={`absence-${absence.id}-${index}`}
-                      colSpan={span}
-                      className="h-14 border-b border-r border-slate-300 p-1 align-middle"
-                    >
-                      <button
-                        type="button"
-                        title={`${label}: ${period}`}
-                        onClick={() =>
-                          openCell(row.user, dayOfWeek, null, null, absence)
-                        }
-                        className={cn(
-                          "flex min-h-11 w-full items-center justify-center rounded-sm border px-2 py-1 text-center font-bold transition hover:ring-2 hover:ring-indigo-400",
-                          kind === "VACATION"
-                            ? "border-slate-400 bg-white text-slate-900"
-                            : "border-red-300 bg-red-50 text-red-900"
-                        )}
-                      >
-                        <span>
-                          <span className="block">{label}</span>
-                          {span > 1 && (
-                            <span className="mt-0.5 block text-[9px] font-medium opacity-75">
-                              {period}
-                            </span>
-                          )}
-                        </span>
-                      </button>
-                    </td>
-                  );
-                  index += span;
-                  continue;
-                }
-
-                const assignment = row.assignments[dayOfWeek];
-                const dayOff =
-                  dayOffByCell.get(`${row.user.id}:${dayOfWeek}`) ?? null;
-                const template = assignment
-                  ? resolveShiftTemplate(assignment.shift)
-                  : null;
-                const overtimeMinutes =
-                  assignment?.booking.overtimeMinutes ?? 0;
-                const legacyOvertime = assignment
-                  ? isLegacyOvertime(assignment.shift)
-                  : false;
-                const hasOvertime = overtimeMinutes > 0 || legacyOvertime;
-                const clickable = Boolean(assignment || dayOff) || canEdit;
-                const nonWorking = nonWorkingDates.has(
-                  format(date, "yyyy-MM-dd")
-                );
-                const title = assignment
-                  ? `${template?.name ?? "Смена"}: ${template?.label ?? ""}${
-                      overtimeMinutes > 0
-                        ? `, переработка +${formatHours(overtimeMinutes / 60)} ч`
-                        : ""
-                    }`
-                  : dayOff
-                    ? "Выходной"
-                    : "Не заполнено";
-
-                cells.push(
-                  <td
-                    key={dayOfWeek}
-                    className={cn(
-                      "h-14 border-b border-r border-slate-300 p-1 text-center align-middle",
-                      nonWorking && "bg-emerald-50",
-                      isToday(date) && "ring-1 ring-inset ring-yellow-300"
-                    )}
-                  >
-                    <button
-                      type="button"
-                      title={title}
-                      disabled={!clickable}
-                      onClick={() =>
-                        openCell(row.user, dayOfWeek, assignment, dayOff, null)
-                      }
-                      className={cn(
-                        "relative flex min-h-11 w-full items-center justify-center overflow-visible rounded-sm border px-1.5 py-1 text-[11px] font-semibold leading-tight transition",
-                        hasOvertime && "pt-4",
-                        assignment
-                          ? "shadow-sm"
-                          : dayOff
-                            ? "border-slate-300 bg-white text-xl text-slate-700"
-                            : "border-transparent bg-transparent text-slate-400",
-                        clickable && "hover:ring-2 hover:ring-indigo-400"
-                      )}
-                      style={
-                        assignment && template
-                          ? {
-                              backgroundColor: template.color,
-                              color: template.textColor,
-                              borderColor:
-                                template.color === "#FFFFFF"
-                                  ? "#94A3B8"
-                                  : template.color,
-                            }
-                          : undefined
-                      }
-                    >
-                      {assignment && template ? (
-                        <span className="whitespace-nowrap">{template.label}</span>
-                      ) : dayOff ? (
-                        "−"
-                      ) : canEdit ? (
-                        <Plus className="size-3.5 opacity-0 group-hover:opacity-60" />
-                      ) : null}
-
-                      {assignment && overtimeMinutes > 0 && (
-                        <span className="absolute right-0.5 top-0.5 z-10 whitespace-nowrap rounded-full border border-white/80 bg-slate-900 px-1.5 py-0.5 text-[9px] font-extrabold leading-none text-white shadow-sm">
-                          П +{formatHours(overtimeMinutes / 60)} ч
-                        </span>
-                      )}
-                      {assignment && overtimeMinutes === 0 && legacyOvertime && (
-                        <span className="absolute right-0.5 top-0.5 z-10 rounded-full border border-white/80 bg-slate-900 px-1.5 py-0.5 text-[9px] font-extrabold leading-none text-white shadow-sm">
-                          П
-                        </span>
-                      )}
-                    </button>
-                  </td>
-                );
-                index += 1;
-              }
 
               return (
-                <tr key={row.user.id} className="group">
-                  <td className="sticky left-0 z-10 border-b border-r border-slate-300 bg-white px-3 py-2">
+                <tr
+                  key={row.user.id}
+                  className={cn(
+                    "group",
+                    isCurrent && "bg-indigo-50 ring-2 ring-inset ring-indigo-300"
+                  )}
+                >
+                  <td
+                    className={cn(
+                      "sticky left-0 z-10 border-b border-r border-slate-300 px-3 py-2",
+                      isCurrent ? "bg-indigo-100" : "bg-white"
+                    )}
+                  >
                     <div className="flex items-center gap-2">
                       <Avatar size="sm">
                         <AvatarFallback className="text-[9px]">
@@ -472,6 +340,11 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
                       <div className="min-w-0">
                         <div className="truncate font-semibold text-slate-900">
                           {row.user.firstName}
+                          {isCurrent && (
+                            <span className="ml-1.5 rounded bg-indigo-600 px-1 py-0.5 text-[9px] text-white">
+                              Вы
+                            </span>
+                          )}
                         </div>
                         <div className="truncate text-[10px] text-slate-500">
                           {getFullName(row.user)}
@@ -479,7 +352,94 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
                       </div>
                     </div>
                   </td>
-                  {cells}
+
+                  {weekDates.map((date, index) => {
+                    const dayOfWeek = index + 1;
+                    const assignment = row.assignments[dayOfWeek];
+                    const dayOff =
+                      dayOffByCell.get(`${row.user.id}:${dayOfWeek}`) ?? null;
+                    const absence =
+                      userAbsences.find((item) => isDateInsideAbsence(date, item)) ??
+                      null;
+                    const template = assignment
+                      ? resolveShiftTemplate(assignment.shift)
+                      : null;
+                    const overtimeMinutes =
+                      assignment?.booking.overtimeMinutes ?? 0;
+                    const mayEdit = canManage || isCurrent;
+                    const clickable = Boolean(
+                      mayEdit || assignment || dayOff || absence
+                    );
+                    const nonWorking = nonWorkingDates.has(
+                      format(date, "yyyy-MM-dd")
+                    );
+
+                    return (
+                      <td
+                        key={dayOfWeek}
+                        className={cn(
+                          "h-14 border-b border-r border-slate-300 p-1 text-center align-middle",
+                          nonWorking && "bg-emerald-50",
+                          isToday(date) && "ring-1 ring-inset ring-yellow-300"
+                        )}
+                      >
+                        <button
+                          type="button"
+                          disabled={!clickable}
+                          onClick={() =>
+                            openCell(
+                              row.user,
+                              dayOfWeek,
+                              assignment,
+                              dayOff,
+                              absence
+                            )
+                          }
+                          className={cn(
+                            "relative flex min-h-11 w-full items-center justify-center rounded-sm border px-1.5 py-1 text-[11px] font-semibold leading-tight transition",
+                            clickable && "hover:ring-2 hover:ring-indigo-400",
+                            absence
+                              ? "border-red-300 bg-red-50 text-red-900"
+                              : assignment
+                                ? "shadow-sm"
+                                : dayOff
+                                  ? "border-slate-300 bg-white text-xl text-slate-700"
+                                  : "border-transparent bg-transparent text-slate-400"
+                          )}
+                          style={
+                            assignment && template && !absence
+                              ? {
+                                  backgroundColor: template.color,
+                                  color: template.textColor,
+                                  borderColor:
+                                    template.color === "#FFFFFF"
+                                      ? "#94A3B8"
+                                      : template.color,
+                                }
+                              : undefined
+                          }
+                        >
+                          {absence ? (
+                            absenceLabel(absence)
+                          ) : assignment && template ? (
+                            <span className="whitespace-nowrap">
+                              {template.label}
+                            </span>
+                          ) : dayOff ? (
+                            "−"
+                          ) : mayEdit ? (
+                            <Plus className="size-3.5 opacity-50" />
+                          ) : null}
+
+                          {assignment && overtimeMinutes > 0 && !absence && (
+                            <span className="absolute right-0.5 top-0.5 rounded-full bg-slate-900 px-1.5 py-0.5 text-[9px] font-extrabold leading-none text-white">
+                              П +{formatHours(overtimeMinutes / 60)} ч
+                            </span>
+                          )}
+                        </button>
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
@@ -489,7 +449,7 @@ export function EmployeeGrid({ weekNumber, year, weekDates }: EmployeeGridProps)
 
       <ShiftAssignmentEditor
         target={editorTarget}
-        canEdit={canEdit}
+        canEdit={Boolean(canEditTarget)}
         onClose={() => setEditorTarget(null)}
         onChanged={invalidateSchedule}
       />
