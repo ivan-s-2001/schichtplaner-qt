@@ -1,10 +1,9 @@
-import type { OrgRole } from "@prisma/client";
 import { db } from "@/lib/db";
 
 export type PreservedScheduleRole = {
   organizationId: string;
   userId: string;
-  role: Extract<OrgRole, "OWNER" | "MANAGER">;
+  role: "OWNER" | "MANAGER";
 };
 
 /**
