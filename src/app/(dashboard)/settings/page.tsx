@@ -1,29 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ShieldAlert, Loader2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarOff, Clock3, Loader2, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
+import { AbsenceSettings } from "@/components/settings/absence-settings";
+import { TimeSettings } from "@/components/settings/time-settings";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useCurrentMember } from "@/lib/hooks/use-current-member";
-import {
-  SettingsSidebar,
-  type SettingsSection,
-} from "@/components/settings/settings-sidebar";
-import { ScheduleSettings } from "@/components/settings/schedule-settings";
-import { TimeSettings } from "@/components/settings/time-settings";
-import { AbsenceSettings } from "@/components/settings/absence-settings";
-import { AccountSettings } from "@/components/settings/account-settings";
-
-// ---------- Types ----------
+import { cn } from "@/lib/utils";
 
 type SettingsResponse = {
   organization: {
     id: string;
     name: string;
-    address: string | null;
-    nameFormat: string;
-    scheduleVisibility: string;
+    managedByOutline: boolean;
   };
   timeSettings: {
     whoCanUse: string;
@@ -45,62 +37,48 @@ type SettingsResponse = {
     country: string;
     state: string | null;
   }[];
-  orgSettings: {
-    aiEnabled: boolean;
-    smsEnabled: boolean;
-  };
 };
 
-// ---------- Component ----------
+type Section = "time" | "absences";
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
   const { data: currentMember, isLoading: memberLoading } = useCurrentMember();
-  const [activeSection, setActiveSection] =
-    useState<SettingsSection>("schedule");
+  const [activeSection, setActiveSection] = useState<Section>("time");
 
   const isAdmin =
     currentMember?.role === "OWNER" || currentMember?.role === "ADMIN";
 
-  // Fetch settings
   const { data, isLoading, error } = useQuery<SettingsResponse>({
     queryKey: ["settings"],
     queryFn: async () => {
-      const res = await fetch("/api/settings");
-      if (!res.ok) throw new Error("Ошибка загрузки настроек");
-      return res.json();
+      const response = await fetch("/api/settings");
+      if (!response.ok) throw new Error("Ошибка загрузки настроек");
+      return response.json();
     },
     enabled: isAdmin,
   });
 
-  // Update settings mutation
   const updateMutation = useMutation({
     mutationFn: async (body: Record<string, unknown>) => {
-      const res = await fetch("/api/settings", {
+      const response = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error || "Ошибка сохранения");
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(result?.error || "Ошибка сохранения");
       }
-      return res.json();
+      return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Настройки сохранены");
-      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      await queryClient.invalidateQueries({ queryKey: ["settings"] });
     },
-    onError: (err: Error) => {
-      toast.error(err.message);
-    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
-  function handleUpdate(data: Record<string, unknown>) {
-    updateMutation.mutate(data);
-  }
-
-  // Loading states
   if (memberLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -109,166 +87,84 @@ export default function SettingsPage() {
     );
   }
 
-  // Access denied
   if (!isAdmin) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3">
+      <div className="flex flex-col items-center justify-center gap-3 py-20">
         <ShieldAlert className="size-12 text-muted-foreground/50" />
         <h2 className="text-xl font-semibold">Доступ запрещён</h2>
         <p className="text-sm text-muted-foreground">
-          Изменять настройки могут только администраторы и владелец.
+          Рабочие настройки доступны администраторам Outline.
         </p>
       </div>
     );
   }
 
-  // Loading settings
   if (isLoading) {
     return (
-      <div className="flex gap-6">
-        <SettingsSidebar
-          activeSection={activeSection}
-          onSectionChange={setActiveSection}
-        />
-        <div className="flex-1 flex items-center justify-center py-20">
-          <Loader2 className="size-6 animate-spin text-muted-foreground" />
-        </div>
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
-  // Error
   if (error || !data) {
     return (
-      <div className="flex gap-6">
-        <SettingsSidebar
-          activeSection={activeSection}
-          onSectionChange={setActiveSection}
-        />
-        <div className="flex-1">
-          <Card className="p-6 text-center text-destructive">
-            Не удалось загрузить настройки. Повторите попытку.
-          </Card>
-        </div>
-      </div>
+      <Card className="p-6 text-center text-destructive">
+        Не удалось загрузить настройки.
+      </Card>
     );
   }
 
-  // Determine holiday country/state from first holiday or default
-  const holidayCountry =
-    data.holidays.length > 0 ? data.holidays[0].country : "DE";
-  const holidayState =
-    data.holidays.length > 0 ? data.holidays[0].state ?? "" : "";
+  const holidayCountry = data.holidays[0]?.country ?? "RU";
+  const holidayState = data.holidays[0]?.state ?? "";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold">Настройки</h1>
+        <h1 className="text-2xl font-bold">Рабочие настройки</h1>
         <p className="text-sm text-muted-foreground">
-          Управление организацией и системными настройками
+          Пользователи, группы и workspace «{data.organization.name}» управляются в Outline.
         </p>
       </div>
 
-      <div className="flex gap-6">
-        {/* Sidebar - hidden on mobile, shown on md+ */}
-        <div className="hidden md:block">
-          <SettingsSidebar
-            activeSection={activeSection}
-            onSectionChange={setActiveSection}
-          />
-        </div>
-
-        {/* Mobile section selector */}
-        <div className="md:hidden w-full">
-          <select
-            value={activeSection}
-            onChange={(e) =>
-              setActiveSection(e.target.value as SettingsSection)
-            }
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm mb-4"
-          >
-            <option value="schedule">График смен</option>
-            <option value="time">Учёт времени</option>
-            <option value="wishplan">Пожелания по сменам</option>
-            <option value="employees">Сотрудники</option>
-            <option value="absences">Отсутствия</option>
-            <option value="account">Учётная запись</option>
-          </select>
-        </div>
-
-        {/* Content area */}
-        <div className="flex-1 min-w-0">
-          {activeSection === "schedule" && (
-            <ScheduleSettings
-              nameFormat={data.organization.nameFormat}
-              scheduleVisibility={data.organization.scheduleVisibility}
-              onUpdate={handleUpdate}
-              isSaving={updateMutation.isPending}
-            />
-          )}
-
-          {activeSection === "time" && (
-            <TimeSettings
-              timeSettings={data.timeSettings}
-              onUpdate={handleUpdate}
-              isSaving={updateMutation.isPending}
-            />
-          )}
-
-          {activeSection === "wishplan" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold">Пожелания по сменам</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Настройки пожеланий по сменам
-                </p>
-              </div>
-              <Card className="flex flex-col items-center justify-center p-12 text-center">
-                <p className="text-lg font-medium">Скоро будет доступно</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Настройки пожеланий будут добавлены в одном из следующих обновлений.
-                </p>
-              </Card>
-            </div>
-          )}
-
-          {activeSection === "employees" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold">Сотрудники</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Mitarbeiter-Einstellungen
-                </p>
-              </div>
-              <Card className="flex flex-col items-center justify-center p-12 text-center">
-                <p className="text-lg font-medium">Скоро будет доступно</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Дополнительные настройки сотрудников появятся в одном из следующих обновлений.
-                </p>
-              </Card>
-            </div>
-          )}
-
-          {activeSection === "absences" && (
-            <AbsenceSettings
-              categories={data.absenceCategories}
-              holidayCountry={holidayCountry}
-              holidayState={holidayState}
-              onUpdateSettings={handleUpdate}
-              isSaving={updateMutation.isPending}
-            />
-          )}
-
-          {activeSection === "account" && (
-            <AccountSettings
-              orgName={data.organization.name}
-              orgAddress={data.organization.address ?? ""}
-              onUpdate={handleUpdate}
-              isSaving={updateMutation.isPending}
-            />
-          )}
-        </div>
+      <div className="flex flex-wrap gap-2 border-b pb-3">
+        <Button
+          type="button"
+          variant={activeSection === "time" ? "secondary" : "ghost"}
+          onClick={() => setActiveSection("time")}
+          className={cn(activeSection === "time" && "font-semibold")}
+        >
+          <Clock3 className="size-4" />
+          Учёт времени
+        </Button>
+        <Button
+          type="button"
+          variant={activeSection === "absences" ? "secondary" : "ghost"}
+          onClick={() => setActiveSection("absences")}
+          className={cn(activeSection === "absences" && "font-semibold")}
+        >
+          <CalendarOff className="size-4" />
+          Отпуска и больничные
+        </Button>
       </div>
+
+      {activeSection === "time" && (
+        <TimeSettings
+          timeSettings={data.timeSettings}
+          onUpdate={(value) => updateMutation.mutate(value)}
+          isSaving={updateMutation.isPending}
+        />
+      )}
+
+      {activeSection === "absences" && (
+        <AbsenceSettings
+          categories={data.absenceCategories}
+          holidayCountry={holidayCountry}
+          holidayState={holidayState}
+          onUpdateSettings={(value) => updateMutation.mutate(value)}
+          isSaving={updateMutation.isPending}
+        />
+      )}
     </div>
   );
 }
