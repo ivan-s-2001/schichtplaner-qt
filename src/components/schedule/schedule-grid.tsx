@@ -14,7 +14,6 @@ import { ShiftForm } from "./shift-form";
 import { EmployeeNav } from "./employee-nav";
 import { ScheduleOptions } from "./schedule-options";
 import { LiveMode, LiveBorder } from "./live-mode";
-import { AISuggestButton } from "./ai-suggest-button";
 import { WishFilterToggle, type WishRequest } from "./wish-plan";
 import type { ScheduleData, ShiftData } from "@/types/schedule";
 
@@ -45,9 +44,7 @@ export function ScheduleGrid({ weekNumber, year, weekDates }: ScheduleGridProps)
   const { data, isLoading } = useQuery<{ schedule: ScheduleData }>({
     queryKey: ["schedule", weekNumber, year],
     queryFn: async () => {
-      const response = await fetch(
-        `/api/schedules?kw=${weekNumber}&year=${year}`
-      );
+      const response = await fetch(`/api/schedules?kw=${weekNumber}&year=${year}`);
       if (!response.ok) throw new Error(tErrors("loadSchedule"));
       return response.json();
     },
@@ -83,9 +80,7 @@ export function ScheduleGrid({ weekNumber, year, weekDates }: ScheduleGridProps)
   });
 
   const wishRequests = wishData?.requests ?? [];
-  const openWishCount = wishRequests.filter(
-    (request) => request.state === "OPEN"
-  ).length;
+  const openWishCount = wishRequests.filter((request) => request.state === "OPEN").length;
 
   const wishByShift = useMemo(() => {
     const result = new Map<string, WishRequest[]>();
@@ -151,10 +146,7 @@ export function ScheduleGrid({ weekNumber, year, weekDates }: ScheduleGridProps)
     const dayShifts = shiftsByDay[dayOfWeek] ?? [];
     const today = isToday(date);
     const weekday = format.dateTime(date, { weekday: "short" });
-    const shortDate = format.dateTime(date, {
-      day: "2-digit",
-      month: "2-digit",
-    });
+    const shortDate = format.dateTime(date, { day: "2-digit", month: "2-digit" });
 
     return (
       <div
@@ -246,7 +238,6 @@ export function ScheduleGrid({ weekNumber, year, weekDates }: ScheduleGridProps)
                 wishCount={openWishCount}
               />
             )}
-            {isManager && <AISuggestButton scheduleId={scheduleId} />}
             <LiveMode scheduleId={scheduleId} isManager={isManager} />
           </div>
         </div>

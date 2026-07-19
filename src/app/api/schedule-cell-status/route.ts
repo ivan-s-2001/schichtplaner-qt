@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getSelectedDivision } from "@/lib/selected-division";
 import { emitToOrg, emitToSchedule } from "@/lib/emit";
 
 const cellStatusSchema = z.object({
@@ -25,9 +26,7 @@ type DateSlot = {
 
 function parseDate(value: string): Date {
   const result = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(result.getTime())) {
-    throw new Error("Некорректная дата");
-  }
+  if (Number.isNaN(result.getTime())) throw new Error("Некорректная дата");
   return result;
 }
 
@@ -42,7 +41,6 @@ function getDateForSchedule(
   weekOneMonday.setUTCDate(
     januaryFourth.getUTCDate() - januaryFourthDay + 1
   );
-
   const result = new Date(weekOneMonday);
   result.setUTCDate(
     weekOneMonday.getUTCDate() + (weekNumber - 1) * 7 + dayOfWeek - 1
@@ -59,25 +57,23 @@ function getDateSlot(date: Date): DateSlot {
   const weekNumber = Math.ceil(
     ((thursday.getTime() - yearStart.getTime()) / 86400000 + 1) / 7
   );
-
   return { date, year, weekNumber, dayOfWeek };
 }
 
 function eachDate(from: Date, to: Date): DateSlot[] {
   const result: DateSlot[] = [];
   const current = new Date(from);
-
   while (current <= to) {
     result.push(getDateSlot(new Date(current)));
     current.setUTCDate(current.getUTCDate() + 1);
   }
-
   return result;
 }
 
 async function removeExistingAssignment(
   tx: Prisma.TransactionClient,
   scheduleId: string,
+  divisionId: string,
   userId: string,
   dayOfWeek: number
 ) {
@@ -86,6 +82,7 @@ async function removeExistingAssignment(
       userId,
       shift: {
         scheduleId,
+        divisionId,
         dayOfWeek,
         deletedAt: null,
       },
@@ -96,21 +93,14 @@ async function removeExistingAssignment(
       shift: { select: { title: true } },
     },
   });
-
   if (bookings.length === 0) return;
 
   await tx.booking.deleteMany({
     where: { id: { in: bookings.map((booking) => booking.id) } },
   });
-
   for (const booking of bookings) {
     if (!booking.shift.title?.startsWith("pool:")) continue;
-
-    const remaining = await tx.booking.count({
-      where: { shiftId: booking.shiftId },
-    });
-
-    if (remaining === 0) {
+    if ((await tx.booking.count({ where: { shiftId: booking.shiftId } })) === 0) {
       await tx.shift.update({
         where: { id: booking.shiftId },
         data: { deletedAt: new Date() },
@@ -119,35 +109,27 @@ async function removeExistingAssignment(
   }
 }
 
-async function requireManager() {
+export async function POST(request: NextRequest) {
   const member = await getCurrentMember();
   if (!member) {
-    return {
-      error: NextResponse.json({ error: "Не авторизован" }, { status: 401 }),
-    };
+    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   }
-
   if (!isManagerOrAbove(member.role)) {
-    return {
-      error: NextResponse.json({ error: "Недостаточно прав" }, { status: 403 }),
-    };
+    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
   }
 
-  return { member };
-}
-
-export async function POST(request: NextRequest) {
-  const access = await requireManager();
-  if ("error" in access) return access.error;
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+  const division = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+  if (!division) {
+    return NextResponse.json({ error: "Нет доступного отдела" }, { status: 403 });
   }
 
-  const parsed = cellStatusSchema.safeParse(body);
+  const parsed = cellStatusSchema.safeParse(
+    await request.json().catch(() => null)
+  );
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Ошибка проверки данных", details: parsed.error.issues },
@@ -155,7 +137,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { member } = access;
   const {
     scheduleId,
     userId,
@@ -166,27 +147,25 @@ export async function POST(request: NextRequest) {
     absenceId,
   } = parsed.data;
 
-  const [schedule, targetMember] = await Promise.all([
+  const [schedule, divisionMember] = await Promise.all([
     db.schedule.findFirst({
       where: {
         id: scheduleId,
         organizationId: member.organizationId,
+        divisionId: division.id,
         deletedAt: null,
       },
       select: { id: true, year: true, weekNumber: true },
     }),
-    db.organizationMember.findFirst({
+    db.divisionMember.findUnique({
       where: {
-        organizationId: member.organizationId,
-        userId,
-        isActive: true,
+        divisionId_userId: { divisionId: division.id, userId },
       },
-      select: { id: true },
     }),
   ]);
 
-  if (!schedule || !targetMember) {
-    return NextResponse.json({ error: "Ячейка графика не найдена" }, { status: 404 });
+  if (!schedule || !divisionMember) {
+    return NextResponse.json({ error: "Ячейка графика недоступна" }, { status: 404 });
   }
 
   const selectedDate = getDateForSchedule(
@@ -198,36 +177,16 @@ export async function POST(request: NextRequest) {
   try {
     const result = await db.$transaction(async (tx) => {
       if (type === "CLEAR") {
-        await removeExistingAssignment(tx, scheduleId, userId, dayOfWeek);
+        await removeExistingAssignment(tx, scheduleId, division.id, userId, dayOfWeek);
         await tx.$executeRaw`
           DELETE FROM "schedule_day_offs"
           WHERE "scheduleId" = ${scheduleId}
             AND "userId" = ${userId}
             AND "dayOfWeek" = ${dayOfWeek}
         `;
-
         if (absenceId) {
-          const absence = await tx.absence.findFirst({
-            where: {
-              id: absenceId,
-              userId,
-              user: {
-                memberships: {
-                  some: {
-                    organizationId: member.organizationId,
-                    isActive: true,
-                  },
-                },
-              },
-            },
-            select: { id: true },
-          });
-
-          if (absence) {
-            await tx.absence.delete({ where: { id: absence.id } });
-          }
+          await tx.absence.deleteMany({ where: { id: absenceId, userId } });
         }
-
         return { type };
       }
 
@@ -241,14 +200,13 @@ export async function POST(request: NextRequest) {
           },
           select: { id: true },
         });
-
         if (overlappingAbsence) {
           throw new Error(
             "На этот день уже задан отпуск или больничный. Сначала измените период отсутствия."
           );
         }
 
-        await removeExistingAssignment(tx, scheduleId, userId, dayOfWeek);
+        await removeExistingAssignment(tx, scheduleId, division.id, userId, dayOfWeek);
         await tx.$executeRaw`
           INSERT INTO "schedule_day_offs"
             ("id", "scheduleId", "userId", "dayOfWeek", "createdAt", "updatedAt")
@@ -257,14 +215,12 @@ export async function POST(request: NextRequest) {
           ON CONFLICT ("scheduleId", "userId", "dayOfWeek")
           DO UPDATE SET "updatedAt" = CURRENT_TIMESTAMP
         `;
-
         return { type };
       }
 
       if (!dateFrom || !dateTo) {
         throw new Error("Для отсутствия укажите период с и по");
       }
-
       const from = parseDate(dateFrom);
       const to = parseDate(dateTo);
       if (from > to) {
@@ -280,10 +236,10 @@ export async function POST(request: NextRequest) {
           ])
         ).values(),
       ];
-
       const schedules = await tx.schedule.findMany({
         where: {
           organizationId: member.organizationId,
+          divisionId: division.id,
           branchId: null,
           deletedAt: null,
           OR: weekKeys,
@@ -302,10 +258,10 @@ export async function POST(request: NextRequest) {
           `${slot.year}-${slot.weekNumber}`
         );
         if (!targetScheduleId) continue;
-
         await removeExistingAssignment(
           tx,
           targetScheduleId,
+          division.id,
           userId,
           slot.dayOfWeek
         );
@@ -325,7 +281,6 @@ export async function POST(request: NextRequest) {
           name: { equals: categoryName, mode: "insensitive" },
         },
       });
-
       if (!category) {
         category = await tx.absenceCategory.create({
           data: {
@@ -338,28 +293,8 @@ export async function POST(request: NextRequest) {
       }
 
       if (absenceId) {
-        const existing = await tx.absence.findFirst({
-          where: {
-            id: absenceId,
-            userId,
-            user: {
-              memberships: {
-                some: {
-                  organizationId: member.organizationId,
-                  isActive: true,
-                },
-              },
-            },
-          },
-          select: { id: true },
-        });
-
-        if (!existing) {
-          throw new Error("Период отсутствия не найден");
-        }
-
-        const absence = await tx.absence.update({
-          where: { id: existing.id },
+        const updated = await tx.absence.updateMany({
+          where: { id: absenceId, userId },
           data: {
             categoryId: category.id,
             dateFrom: from,
@@ -367,8 +302,8 @@ export async function POST(request: NextRequest) {
             status: "APPROVED",
           },
         });
-
-        return { type, absenceId: absence.id };
+        if (updated.count !== 1) throw new Error("Период отсутствия не найден");
+        return { type, absenceId };
       }
 
       const absence = await tx.absence.create({
@@ -381,22 +316,18 @@ export async function POST(request: NextRequest) {
           note: "Добавлено из графика",
         },
       });
-
       return { type, absenceId: absence.id };
     });
 
-    emitToOrg(member.organizationId, "schedule:updated", {
+    const event = {
       scheduleId,
+      divisionId: division.id,
       action: "cell_status_changed",
       userId,
       dayOfWeek,
-    });
-    emitToSchedule(scheduleId, "schedule:updated", {
-      scheduleId,
-      action: "cell_status_changed",
-      userId,
-      dayOfWeek,
-    });
+    };
+    emitToOrg(member.organizationId, "schedule:updated", event);
+    emitToSchedule(scheduleId, "schedule:updated", event);
 
     return NextResponse.json({ cell: result });
   } catch (error) {

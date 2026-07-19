@@ -1,25 +1,24 @@
 {
-  "name": "schichtplaner",
+  "name": "schichtplaner-qt",
   "version": "0.1.0",
-  "description": "Open-source shift planning software with AI assistance, real-time collaboration, and self-hosting",
+  "description": "Self-hosted departmental scheduling integrated with Outline users and groups",
   "license": "MIT",
-  "author": "lennystepn-hue",
+  "author": "ivan-s-2001",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lennystepn-hue/schichtplaner.git"
+    "url": "https://github.com/ivan-s-2001/schichtplaner-qt.git"
   },
-  "homepage": "https://github.com/lennystepn-hue/schichtplaner",
+  "homepage": "https://github.com/ivan-s-2001/schichtplaner-qt",
   "bugs": {
-    "url": "https://github.com/lennystepn-hue/schichtplaner/issues"
+    "url": "https://github.com/ivan-s-2001/schichtplaner-qt/issues"
   },
   "keywords": [
-    "schichtplan",
     "shift-planning",
-    "dienstplan",
-    "workforce-management",
-    "nextjs",
+    "schedule",
+    "outline",
     "self-hosted",
-    "open-source"
+    "nextjs",
+    "postgresql"
   ],
   "scripts": {
     "dev": "next dev",
@@ -31,12 +30,9 @@
     "start:server": "node dist/server.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
-    "@auth/prisma-adapter": "^2.11.1",
     "@prisma/adapter-pg": "^7.4.2",
     "@prisma/client": "^7.4.2",
     "@tanstack/react-query": "^5.90.21",
-    "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -68,7 +64,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.19.35",
     "@types/react": "^19",
     "@types/react-dom": "^19",

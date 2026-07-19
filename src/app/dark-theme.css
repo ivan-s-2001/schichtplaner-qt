@@ -1,0 +1,71 @@
+.dark {
+  color-scheme: dark;
+
+  --outline-almost-black: #f4f7fa;
+  --outline-light-black: #d8dee8;
+  --outline-white: #11161d;
+  --outline-accent: #58a6ff;
+  --outline-accent-hover: #79b8ff;
+  --outline-slate: #9aa9bc;
+  --outline-slate-light: #2a3441;
+  --outline-slate-dark: #c2ccda;
+  --outline-smoke: #171d25;
+  --outline-smoke-light: #11161d;
+  --outline-smoke-dark: #242d39;
+  --outline-sidebar-background: #151b23;
+  --outline-sidebar-hover: #222b36;
+  --outline-sidebar-active: #2c3745;
+  --outline-sidebar-text: #d7deea;
+
+  --background: #0f141a;
+  --foreground: #eef2f7;
+  --card: #151b23;
+  --card-foreground: #eef2f7;
+  --popover: #171d25;
+  --popover-foreground: #eef2f7;
+  --primary: #58a6ff;
+  --primary-foreground: #07111d;
+  --secondary: #202833;
+  --secondary-foreground: #e4eaf2;
+  --muted: #1b222c;
+  --muted-foreground: #a7b3c3;
+  --accent: #2a3441;
+  --accent-foreground: #f4f7fa;
+  --destructive: #ff5b78;
+  --border: #303b49;
+  --input: #3a4656;
+  --ring: #58a6ff;
+  --sidebar: #151b23;
+  --sidebar-foreground: #d7deea;
+  --sidebar-primary: #2c3745;
+  --sidebar-primary-foreground: #f4f7fa;
+  --sidebar-accent: #222b36;
+  --sidebar-accent-foreground: #f4f7fa;
+  --sidebar-border: #303b49;
+  --sidebar-ring: #58a6ff;
+}
+
+.dark [data-slot="tooltip-content"] {
+  background: #eef2f7;
+  color: #111319;
+}
+
+.dark .schedule-equal-day-columns {
+  color: var(--foreground);
+}
+
+.dark .schedule-equal-day-columns .text-muted-foreground {
+  color: var(--muted-foreground) !important;
+}
+
+.dark .schedule-equal-day-columns table th,
+.dark .schedule-equal-day-columns table td {
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.dark table[class*="min-w-[1080px]"] button.relative > span > span:nth-child(2) {
+  border-color: rgb(15 20 26 / 75%);
+  background: rgb(238 242 247 / 92%);
+  color: #111319;
+}

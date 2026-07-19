@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getSelectedDivision } from "@/lib/selected-division";
 import { emitToOrg, emitToSchedule } from "@/lib/emit";
 
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const updateShiftSchema = z.object({
-  divisionId: z.string().optional().nullable(),
   dayOfWeek: z.number().int().min(1).max(7).optional(),
-  shiftFrom: z.string().regex(TIME_REGEX, "Некорректное время начала (ЧЧ:ММ)").optional(),
-  shiftTo: z.string().regex(TIME_REGEX, "Некорректное время окончания (ЧЧ:ММ)").optional(),
+  shiftFrom: z.string().regex(TIME_REGEX).optional(),
+  shiftTo: z.string().regex(TIME_REGEX).optional(),
   maxEmployees: z.number().int().min(1).optional(),
   pauseOption: z.enum(["PER_HOUR", "PER_SHIFT"]).optional(),
   pauseValue: z.number().int().min(0).optional(),
@@ -22,31 +22,54 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-/**
- * PATCH /api/shifts/:id
- *
- * Update shift fields.
- */
-export async function PATCH(request: NextRequest, context: RouteContext) {
+async function getAuthorizedShift(request: NextRequest, id: string) {
   const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
-  }
+  if (!member) return { error: "unauthorized" as const };
+  if (!isManagerOrAbove(member.role)) return { error: "forbidden" as const };
 
-  if (!isManagerOrAbove(member.role)) {
-    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
-  }
+  const selectedDivision = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+  if (!selectedDivision) return { error: "division" as const };
 
+  const shift = await db.shift.findFirst({
+    where: {
+      id,
+      divisionId: selectedDivision.id,
+      deletedAt: null,
+      schedule: {
+        organizationId: member.organizationId,
+        divisionId: selectedDivision.id,
+        deletedAt: null,
+      },
+    },
+    include: {
+      schedule: { select: { organizationId: true, divisionId: true } },
+    },
+  });
+
+  if (!shift) return { error: "not_found" as const };
+  return { member, selectedDivision, shift };
+}
+
+export async function PATCH(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+  const authorized = await getAuthorizedShift(request, id);
+  if ("error" in authorized) {
+    const status =
+      authorized.error === "unauthorized"
+        ? 401
+        : authorized.error === "forbidden" || authorized.error === "division"
+          ? 403
+          : 404;
+    return NextResponse.json({ error: "Смена недоступна" }, { status });
   }
 
-  const parsed = updateShiftSchema.safeParse(body);
+  const parsed = updateShiftSchema.safeParse(
+    await request.json().catch(() => null)
+  );
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Ошибка проверки данных", details: parsed.error.issues },
@@ -54,26 +77,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
   }
 
-  // Verify shift exists and belongs to member's org
-  const existing = await db.shift.findFirst({
-    where: { id, deletedAt: null },
-    include: {
-      schedule: { select: { organizationId: true } },
-    },
-  });
-
-  if (!existing || existing.schedule.organizationId !== member.organizationId) {
-    return NextResponse.json(
-      { error: "Смена не найдена" },
-      { status: 404 }
-    );
-  }
-
-  const updateData = parsed.data;
-
-  // Validate shiftFrom < shiftTo if either time field is being updated
-  const effectiveFrom = updateData.shiftFrom ?? existing.shiftFrom;
-  const effectiveTo = updateData.shiftTo ?? existing.shiftTo;
+  const effectiveFrom = parsed.data.shiftFrom ?? authorized.shift.shiftFrom;
+  const effectiveTo = parsed.data.shiftTo ?? authorized.shift.shiftTo;
   if (effectiveFrom >= effectiveTo) {
     return NextResponse.json(
       { error: "Время начала должно быть раньше времени окончания" },
@@ -81,26 +86,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
   }
 
-  // If divisionId is being updated, verify it exists
-  if (updateData.divisionId) {
-    const division = await db.division.findFirst({
-      where: {
-        id: updateData.divisionId,
-        organizationId: member.organizationId,
-        deletedAt: null,
-      },
-    });
-    if (!division) {
-      return NextResponse.json(
-        { error: "Подразделение не найдено" },
-        { status: 404 }
-      );
-    }
-  }
-
   const shift = await db.shift.update({
     where: { id },
-    data: updateData,
+    data: parsed.data,
     include: {
       division: {
         select: { id: true, title: true, color: true },
@@ -121,14 +109,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     },
   });
 
-  // Broadcast real-time update
-  emitToOrg(member.organizationId, "schedule:updated", {
-    scheduleId: existing.scheduleId,
+  emitToOrg(authorized.member.organizationId, "schedule:updated", {
+    scheduleId: authorized.shift.scheduleId,
+    divisionId: authorized.selectedDivision.id,
     action: "shift_updated",
     shiftId: id,
   });
-  emitToSchedule(existing.scheduleId, "schedule:updated", {
-    scheduleId: existing.scheduleId,
+  emitToSchedule(authorized.shift.scheduleId, "schedule:updated", {
+    scheduleId: authorized.shift.scheduleId,
+    divisionId: authorized.selectedDivision.id,
     action: "shift_updated",
     shiftId: id,
   });
@@ -136,39 +125,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   return NextResponse.json({ shift });
 }
 
-/**
- * DELETE /api/shifts/:id
- *
- * Soft-delete a shift (set deletedAt). Also removes all bookings.
- */
-export async function DELETE(_request: NextRequest, context: RouteContext) {
-  const member = await getCurrentMember();
-  if (!member) {
-    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
-  }
-
-  if (!isManagerOrAbove(member.role)) {
-    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
-  }
-
+export async function DELETE(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
-
-  // Verify shift exists and belongs to member's org
-  const existing = await db.shift.findFirst({
-    where: { id, deletedAt: null },
-    include: {
-      schedule: { select: { organizationId: true } },
-    },
-  });
-
-  if (!existing || existing.schedule.organizationId !== member.organizationId) {
-    return NextResponse.json(
-      { error: "Смена не найдена" },
-      { status: 404 }
-    );
+  const authorized = await getAuthorizedShift(request, id);
+  if ("error" in authorized) {
+    const status =
+      authorized.error === "unauthorized"
+        ? 401
+        : authorized.error === "forbidden" || authorized.error === "division"
+          ? 403
+          : 404;
+    return NextResponse.json({ error: "Смена недоступна" }, { status });
   }
 
-  // Soft-delete shift and remove all bookings in a transaction
   await db.$transaction([
     db.booking.deleteMany({ where: { shiftId: id } }),
     db.shift.update({
@@ -177,14 +146,15 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     }),
   ]);
 
-  // Broadcast real-time update
-  emitToOrg(member.organizationId, "schedule:updated", {
-    scheduleId: existing.scheduleId,
+  emitToOrg(authorized.member.organizationId, "schedule:updated", {
+    scheduleId: authorized.shift.scheduleId,
+    divisionId: authorized.selectedDivision.id,
     action: "shift_deleted",
     shiftId: id,
   });
-  emitToSchedule(existing.scheduleId, "schedule:updated", {
-    scheduleId: existing.scheduleId,
+  emitToSchedule(authorized.shift.scheduleId, "schedule:updated", {
+    scheduleId: authorized.shift.scheduleId,
+    divisionId: authorized.selectedDivision.id,
     action: "shift_deleted",
     shiftId: id,
   });

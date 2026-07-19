@@ -2,42 +2,43 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
-import {
-  startOfMonth,
-  endOfMonth,
-  parse,
-} from "date-fns";
+import { getSelectedDivision } from "@/lib/selected-division";
+import { startOfMonth, endOfMonth, parse } from "date-fns";
 
-/**
- * Compute duration in decimal hours from two "HH:MM" strings.
- */
 function computeHoursFromRange(from: string, to: string): number {
   const [fh, fm] = from.split(":").map(Number);
   const [th, tm] = to.split(":").map(Number);
   let totalMinutes = th * 60 + tm - (fh * 60 + fm);
-  if (totalMinutes < 0) totalMinutes += 24 * 60; // overnight
+  if (totalMinutes < 0) totalMinutes += 24 * 60;
   return totalMinutes / 60;
 }
 
-// GET /api/time — list time records for a month
 export async function GET(request: NextRequest) {
   const member = await getCurrentMember();
   if (!member) {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   }
 
+  const selectedDivision = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+  if (!selectedDivision) {
+    return NextResponse.json({ error: "Нет доступного отдела" }, { status: 403 });
+  }
+
   const { searchParams } = request.nextUrl;
-  const monthParam = searchParams.get("month"); // e.g. "2026-03"
+  const monthParam = searchParams.get("month");
   const userIdParam = searchParams.get("userId");
 
-  // Parse month
   let monthStart: Date;
   let monthEnd: Date;
   if (monthParam) {
     const parsed = parse(monthParam, "yyyy-MM", new Date());
-    if (isNaN(parsed.getTime())) {
+    if (Number.isNaN(parsed.getTime())) {
       return NextResponse.json(
-        { error: "Invalid month format. Use yyyy-MM" },
+        { error: "Некорректный месяц, используйте yyyy-MM" },
         { status: 400 }
       );
     }
@@ -48,9 +49,18 @@ export async function GET(request: NextRequest) {
     monthEnd = endOfMonth(new Date());
   }
 
-  // Get all org members to filter by org
+  const divisionMembers = await db.divisionMember.findMany({
+    where: { divisionId: selectedDivision.id },
+    select: { userId: true },
+  });
+  const divisionUserIds = divisionMembers.map((item) => item.userId);
+
   const orgMembers = await db.organizationMember.findMany({
-    where: { organizationId: member.organizationId, isActive: true },
+    where: {
+      organizationId: member.organizationId,
+      isActive: true,
+      userId: { in: divisionUserIds },
+    },
     include: {
       user: {
         select: {
@@ -63,21 +73,13 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const orgUserIds = orgMembers.map((m) => m.user.id);
-
-  // Employees can only see their own records
+  const allowedUserIds = orgMembers.map((item) => item.user.id);
   const isManager = isManagerOrAbove(member.role);
-  let filterUserIds: string[];
-
-  if (isManager) {
-    if (userIdParam && orgUserIds.includes(userIdParam)) {
-      filterUserIds = [userIdParam];
-    } else {
-      filterUserIds = orgUserIds;
-    }
-  } else {
-    filterUserIds = [member.user.id];
-  }
+  const filterUserIds = isManager
+    ? userIdParam && allowedUserIds.includes(userIdParam)
+      ? [userIdParam]
+      : allowedUserIds
+    : [member.user.id];
 
   const records = await db.timeRecord.findMany({
     where: {
@@ -90,7 +92,6 @@ export async function GET(request: NextRequest) {
     orderBy: [{ date: "asc" }, { timeFrom: "asc" }],
   });
 
-  // Group by user
   const groupedMap = new Map<
     string,
     {
@@ -103,15 +104,16 @@ export async function GET(request: NextRequest) {
     }
   >();
 
-  // Initialize all filtered users
-  for (const uid of filterUserIds) {
-    const om = orgMembers.find((m) => m.user.id === uid);
-    if (om) {
-      groupedMap.set(uid, {
-        userId: uid,
-        firstName: om.user.firstName,
-        lastName: om.user.lastName,
-        profileImage: om.user.profileImage,
+  for (const userId of filterUserIds) {
+    const organizationMember = orgMembers.find(
+      (item) => item.user.id === userId
+    );
+    if (organizationMember) {
+      groupedMap.set(userId, {
+        userId,
+        firstName: organizationMember.user.firstName,
+        lastName: organizationMember.user.lastName,
+        profileImage: organizationMember.user.profileImage,
         totalHours: 0,
         records: [],
       });
@@ -123,7 +125,6 @@ export async function GET(request: NextRequest) {
     if (!group) continue;
     group.records.push(record);
 
-    // Calculate hours
     if (record.type === "MANUAL" && record.timeFrom && record.timeTo) {
       group.totalHours += computeHoursFromRange(record.timeFrom, record.timeTo);
     } else if (
@@ -137,19 +138,18 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const grouped = Array.from(groupedMap.values()).sort((a, b) =>
+  const employees = Array.from(groupedMap.values()).sort((a, b) =>
     a.lastName.localeCompare(b.lastName)
   );
 
-  return NextResponse.json({ employees: grouped });
+  return NextResponse.json({ division: selectedDivision, employees });
 }
 
-// POST /api/time — create manual time record
 const createManualSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("MANUAL"),
     userId: z.string().min(1),
-    date: z.string().min(1), // "2026-03-15"
+    date: z.string().min(1),
     timeFrom: z.string().regex(/^\d{2}:\d{2}$/),
     timeTo: z.string().regex(/^\d{2}:\d{2}$/),
     categoryId: z.string().optional(),
@@ -172,6 +172,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   }
 
+  const selectedDivision = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+  if (!selectedDivision) {
+    return NextResponse.json({ error: "Нет доступного отдела" }, { status: 403 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -188,33 +197,29 @@ export async function POST(request: NextRequest) {
   }
 
   const data = parsed.data;
-
-  // Permission check: employees can only create for themselves
   if (!isManagerOrAbove(member.role) && data.userId !== member.user.id) {
     return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
   }
 
-  // Check that the user is in the same org
-  const targetMember = await db.organizationMember.findFirst({
+  const targetMember = await db.divisionMember.findUnique({
     where: {
-      organizationId: member.organizationId,
-      userId: data.userId,
-      isActive: true,
+      divisionId_userId: {
+        divisionId: selectedDivision.id,
+        userId: data.userId,
+      },
     },
   });
   if (!targetMember) {
     return NextResponse.json(
-      { error: "User not found in organization" },
+      { error: "Сотрудник не состоит в выбранном отделе" },
       { status: 404 }
     );
   }
 
-  const recordDate = new Date(data.date + "T00:00:00.000Z");
-
   const record = await db.timeRecord.create({
     data: {
       userId: data.userId,
-      date: recordDate,
+      date: new Date(`${data.date}T00:00:00.000Z`),
       type: data.type,
       timeFrom: data.type === "MANUAL" ? data.timeFrom : null,
       timeTo: data.type === "MANUAL" ? data.timeTo : null,

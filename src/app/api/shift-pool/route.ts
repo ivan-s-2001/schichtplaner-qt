@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
+import { getSelectedDivision } from "@/lib/selected-division";
 import {
   DEFAULT_SHIFT_POOL,
   type ShiftTemplate,
@@ -82,15 +83,15 @@ async function ensureDefaultPool(
 ): Promise<void> {
   const rows = await tx.$queryRaw<{ count: bigint }[]>`
     SELECT COUNT(*) AS "count"
-    FROM "shift_pool_templates"
-    WHERE "organizationId" = ${organizationId}
+    FROM schedule."shift_pool_templates"
+    WHERE "organizationId" = CAST(${organizationId} AS uuid)
   `;
 
   if (Number(rows[0]?.count ?? 0) > 0) return;
 
   for (const item of DEFAULT_SHIFT_POOL) {
     await tx.$executeRaw`
-      INSERT INTO "shift_pool_templates"
+      INSERT INTO schedule."shift_pool_templates"
         (
           "id", "organizationId", "code", "name", "shiftFrom", "shiftTo",
           "color", "textColor", "description", "sortOrder", "isActive",
@@ -98,43 +99,72 @@ async function ensureDefaultPool(
         )
       VALUES
         (
-          ${`${organizationId}:${item.id}`}, ${organizationId}, ${item.id},
-          ${item.name}, ${item.shiftFrom}, ${item.shiftTo}, ${item.color},
-          ${item.textColor}, ${item.description}, ${item.sortOrder}, true,
-          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+          ${`${organizationId}:${item.id}`}, CAST(${organizationId} AS uuid),
+          ${item.id}, ${item.name}, ${item.shiftFrom}, ${item.shiftTo},
+          ${item.color}, ${item.textColor}, ${item.description}, ${item.sortOrder},
+          true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )
       ON CONFLICT ("organizationId", "code") DO NOTHING
     `;
   }
 }
 
-async function requireMember() {
+async function requireShiftDivision(request: NextRequest) {
   const member = await getCurrentMember();
   if (!member) {
     return {
       error: NextResponse.json({ error: "Не авторизован" }, { status: 401 }),
     };
   }
-  return { member };
+
+  const division = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+  if (!division) {
+    return {
+      error: NextResponse.json(
+        { error: "Нет доступного подразделения" },
+        { status: 403 }
+      ),
+    };
+  }
+  if (division.scheduleMode !== "SHIFT") {
+    return {
+      error: NextResponse.json(
+        { error: "Пул смен доступен только сменному подразделению" },
+        { status: 409 }
+      ),
+    };
+  }
+
+  return {
+    member,
+    division,
+    canEdit: isAdminOrAbove(member.role) || division.isManager,
+  };
 }
 
-async function requireManager() {
-  const access = await requireMember();
+async function requireShiftManager(request: NextRequest) {
+  const access = await requireShiftDivision(request);
   if ("error" in access) return access;
-  if (!isManagerOrAbove(access.member.role)) {
+  if (!access.canEdit) {
     return {
-      error: NextResponse.json({ error: "Недостаточно прав" }, { status: 403 }),
+      error: NextResponse.json(
+        { error: "Пул смен может менять только руководитель подразделения" },
+        { status: 403 }
+      ),
     };
   }
   return access;
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireMember();
+  const access = await requireShiftDivision(request);
   if ("error" in access) return access.error;
 
-  const { member } = access;
-  const canEdit = isManagerOrAbove(member.role);
+  const { member, canEdit } = access;
   const includeInactive =
     canEdit && request.nextUrl.searchParams.get("includeInactive") === "1";
 
@@ -145,32 +175,30 @@ export async function GET(request: NextRequest) {
         SELECT
           "code", "name", "shiftFrom", "shiftTo", "color", "textColor",
           "description", "sortOrder", "isActive"
-        FROM "shift_pool_templates"
-        WHERE "organizationId" = ${member.organizationId}
+        FROM schedule."shift_pool_templates"
+        WHERE "organizationId" = CAST(${member.organizationId} AS uuid)
         ORDER BY "sortOrder" ASC, "createdAt" ASC
       `
     : await db.$queryRaw<ShiftPoolRow[]>`
         SELECT
           "code", "name", "shiftFrom", "shiftTo", "color", "textColor",
           "description", "sortOrder", "isActive"
-        FROM "shift_pool_templates"
-        WHERE "organizationId" = ${member.organizationId}
+        FROM schedule."shift_pool_templates"
+        WHERE "organizationId" = CAST(${member.organizationId} AS uuid)
           AND "isActive" = true
         ORDER BY "sortOrder" ASC, "createdAt" ASC
       `;
 
-  return NextResponse.json({
-    templates: rows.map(toTemplate),
-    canEdit,
-  });
+  return NextResponse.json({ templates: rows.map(toTemplate), canEdit });
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireManager();
+  const access = await requireShiftManager(request);
   if ("error" in access) return access.error;
 
-  const body = await request.json().catch(() => null);
-  const parsed = createSchema.safeParse(body);
+  const parsed = createSchema.safeParse(
+    await request.json().catch(() => null)
+  );
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Ошибка проверки данных", details: parsed.error.issues },
@@ -186,13 +214,13 @@ export async function POST(request: NextRequest) {
     await ensureDefaultPool(tx, member.organizationId);
     const orderRows = await tx.$queryRaw<{ sortOrder: number }[]>`
       SELECT COALESCE(MAX("sortOrder"), 0) + 10 AS "sortOrder"
-      FROM "shift_pool_templates"
-      WHERE "organizationId" = ${member.organizationId}
+      FROM schedule."shift_pool_templates"
+      WHERE "organizationId" = CAST(${member.organizationId} AS uuid)
     `;
     const sortOrder = Number(orderRows[0]?.sortOrder ?? 10);
 
     await tx.$executeRaw`
-      INSERT INTO "shift_pool_templates"
+      INSERT INTO schedule."shift_pool_templates"
         (
           "id", "organizationId", "code", "name", "shiftFrom", "shiftTo",
           "color", "textColor", "description", "sortOrder", "isActive",
@@ -200,8 +228,9 @@ export async function POST(request: NextRequest) {
         )
       VALUES
         (
-          ${`${member.organizationId}:${code}`}, ${member.organizationId}, ${code},
-          ${values.name}, ${values.shiftFrom}, ${values.shiftTo}, ${values.color},
+          ${`${member.organizationId}:${code}`},
+          CAST(${member.organizationId} AS uuid), ${code}, ${values.name},
+          ${values.shiftFrom}, ${values.shiftTo}, ${values.color},
           ${values.textColor}, ${values.description ?? null}, ${sortOrder}, true,
           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )
@@ -225,11 +254,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const access = await requireManager();
+  const access = await requireShiftManager(request);
   if ("error" in access) return access.error;
 
-  const body = await request.json().catch(() => null);
-  const parsed = updateSchema.safeParse(body);
+  const parsed = updateSchema.safeParse(
+    await request.json().catch(() => null)
+  );
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Ошибка проверки данных", details: parsed.error.issues },
@@ -239,32 +269,35 @@ export async function PATCH(request: NextRequest) {
 
   const { member } = access;
   const values = parsed.data;
-
   const existing = await db.$queryRaw<ShiftPoolRow[]>`
     SELECT
       "code", "name", "shiftFrom", "shiftTo", "color", "textColor",
       "description", "sortOrder", "isActive"
-    FROM "shift_pool_templates"
-    WHERE "organizationId" = ${member.organizationId}
+    FROM schedule."shift_pool_templates"
+    WHERE "organizationId" = CAST(${member.organizationId} AS uuid)
       AND "code" = ${values.id}
     LIMIT 1
   `;
 
   if (!existing[0]) {
-    return NextResponse.json({ error: "Шаблон смены не найден" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Шаблон смены не найден" },
+      { status: 404 }
+    );
   }
 
   const assigned = await db.$queryRaw<AssignedShiftRow[]>`
     SELECT
-      s."id",
-      schedule."year",
-      schedule."weekNumber",
-      s."dayOfWeek"
-    FROM "shifts" s
-    INNER JOIN "schedules" schedule ON schedule."id" = s."scheduleId"
-    WHERE schedule."organizationId" = ${member.organizationId}
-      AND s."poolTemplateCode" = ${values.id}
-      AND s."deletedAt" IS NULL
+      shift."id",
+      weekly."year",
+      weekly."weekNumber",
+      shift."dayOfWeek"
+    FROM schedule."shifts" shift
+    INNER JOIN schedule."schedules" weekly
+      ON weekly."id" = shift."scheduleId"
+    WHERE weekly."organizationId" = CAST(${member.organizationId} AS uuid)
+      AND shift."poolTemplateCode" = ${values.id}
+      AND shift."deletedAt" IS NULL
   `;
 
   const today = new Date();
@@ -279,7 +312,7 @@ export async function PATCH(request: NextRequest) {
 
   await db.$transaction(async (tx) => {
     await tx.$executeRaw`
-      UPDATE "shift_pool_templates"
+      UPDATE schedule."shift_pool_templates"
       SET
         "name" = ${values.name},
         "shiftFrom" = ${values.shiftFrom},
@@ -289,13 +322,13 @@ export async function PATCH(request: NextRequest) {
         "description" = ${values.description ?? null},
         "isActive" = true,
         "updatedAt" = CURRENT_TIMESTAMP
-      WHERE "organizationId" = ${member.organizationId}
+      WHERE "organizationId" = CAST(${member.organizationId} AS uuid)
         AND "code" = ${values.id}
     `;
 
     for (const shiftId of shiftIds) {
       await tx.$executeRaw`
-        UPDATE "shifts"
+        UPDATE schedule."shifts"
         SET
           "shiftFrom" = ${values.shiftFrom},
           "shiftTo" = ${values.shiftTo},
@@ -327,24 +360,31 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const access = await requireManager();
+  const access = await requireShiftManager(request);
   if ("error" in access) return access.error;
 
-  const body = await request.json().catch(() => null);
-  const parsed = deleteSchema.safeParse(body);
+  const parsed = deleteSchema.safeParse(
+    await request.json().catch(() => null)
+  );
   if (!parsed.success) {
-    return NextResponse.json({ error: "Некорректный шаблон" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Некорректный шаблон" },
+      { status: 400 }
+    );
   }
 
   const changed = await db.$executeRaw`
-    UPDATE "shift_pool_templates"
+    UPDATE schedule."shift_pool_templates"
     SET "isActive" = false, "updatedAt" = CURRENT_TIMESTAMP
-    WHERE "organizationId" = ${access.member.organizationId}
+    WHERE "organizationId" = CAST(${access.member.organizationId} AS uuid)
       AND "code" = ${parsed.data.id}
   `;
 
   if (changed === 0) {
-    return NextResponse.json({ error: "Шаблон смены не найден" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Шаблон смены не найден" },
+      { status: 404 }
+    );
   }
 
   return NextResponse.json({ success: true });
