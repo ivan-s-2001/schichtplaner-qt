@@ -3,6 +3,10 @@ import { db } from "@/lib/db";
 
 const TOKEN_ISSUER = "outline";
 const TOKEN_AUDIENCE = "schichtplaner";
+const MAX_TOKEN_LIFETIME_SECONDS = 5 * 60;
+const CLOCK_SKEW_SECONDS = 30;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type OutlineTokenPayload = {
   sub: string;
@@ -10,8 +14,9 @@ export type OutlineTokenPayload = {
   iss: string;
   aud: string;
   iat: number;
+  nbf?: number;
   exp: number;
-  jti?: string;
+  jti: string;
 };
 
 export type OutlineSessionUser = {
@@ -36,34 +41,21 @@ function getSsoSecret(): string {
   return secret;
 }
 
-export function verifyOutlineIdentity(
-  userId: string,
-  teamId: string,
-  signature: string
-): void {
-  const expectedSignature = createHmac("sha256", getSsoSecret())
-    .update(`${userId}:${teamId}`)
-    .digest();
-  const actualSignature = Buffer.from(signature, "base64url");
-
-  if (
-    actualSignature.length !== expectedSignature.length ||
-    !timingSafeEqual(actualSignature, expectedSignature)
-  ) {
-    throw new Error("Invalid Outline identity signature");
-  }
+function isInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value);
 }
 
 export function verifyOutlineToken(token: string): OutlineTokenPayload {
   const parts = token.split(".");
-  if (parts.length !== 3) {
+  if (parts.length !== 3 || parts.some((part) => !part)) {
     throw new Error("Invalid Outline token");
   }
 
   const [encodedHeader, encodedPayload, encodedSignature] = parts;
-  const header = decodeJsonPart<{ alg?: string }>(encodedHeader);
-  if (header.alg !== "HS256") {
-    throw new Error("Unsupported Outline token algorithm");
+  const header = decodeJsonPart<{ alg?: unknown; typ?: unknown }>(encodedHeader);
+
+  if (header.alg !== "HS256" || header.typ !== "JWT") {
+    throw new Error("Unsupported Outline token header");
   }
 
   const expectedSignature = createHmac("sha256", getSsoSecret())
@@ -78,21 +70,41 @@ export function verifyOutlineToken(token: string): OutlineTokenPayload {
     throw new Error("Invalid Outline token signature");
   }
 
-  const payload = decodeJsonPart<OutlineTokenPayload>(encodedPayload);
+  const payload = decodeJsonPart<Partial<OutlineTokenPayload>>(encodedPayload);
   const now = Math.floor(Date.now() / 1000);
 
   if (
     payload.iss !== TOKEN_ISSUER ||
     payload.aud !== TOKEN_AUDIENCE ||
-    !payload.sub ||
-    !payload.teamId ||
-    !payload.exp ||
-    payload.exp <= now
+    typeof payload.sub !== "string" ||
+    !UUID_PATTERN.test(payload.sub) ||
+    typeof payload.teamId !== "string" ||
+    !UUID_PATTERN.test(payload.teamId) ||
+    typeof payload.jti !== "string" ||
+    payload.jti.length < 16 ||
+    !isInteger(payload.iat) ||
+    !isInteger(payload.exp)
   ) {
-    throw new Error("Expired or invalid Outline token");
+    throw new Error("Invalid Outline token claims");
   }
 
-  return payload;
+  if (
+    payload.iat > now + CLOCK_SKEW_SECONDS ||
+    payload.exp <= now ||
+    payload.exp <= payload.iat ||
+    payload.exp - payload.iat > MAX_TOKEN_LIFETIME_SECONDS
+  ) {
+    throw new Error("Expired or invalid Outline token lifetime");
+  }
+
+  if (
+    payload.nbf !== undefined &&
+    (!isInteger(payload.nbf) || payload.nbf > now + CLOCK_SKEW_SECONDS)
+  ) {
+    throw new Error("Outline token is not active yet");
+  }
+
+  return payload as OutlineTokenPayload;
 }
 
 export async function loadOutlineUserById(

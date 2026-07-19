@@ -1,8 +1,9 @@
 /**
- * Server-side Socket.io emit helpers.
+ * Server-side Socket.IO emit helpers.
  *
- * These functions access the global `__socketIO` instance set by the custom
- * server (server.ts) and broadcast events to organization or schedule rooms.
+ * These functions access the global `__socketIO` instance set by the
+ * production custom server (`server.cjs`) and broadcast events only to rooms
+ * that were authorized during the Socket.IO connection lifecycle.
  *
  * Usage in API routes:
  *   import { emitToOrg, emitToSchedule } from "@/lib/emit";

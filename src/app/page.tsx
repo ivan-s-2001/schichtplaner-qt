@@ -13,7 +13,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const returnTo = first(params.returnTo);
   const mode =
     first(params.mode) === "vacations" ||
-    first(params.embed) === "1" ||
     returnTo === "/vacations" ||
     returnTo === "/employees/absences"
       ? "vacations"
@@ -21,9 +20,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   return (
     <EmailAccessGate
-      userId={first(params.userId)}
-      teamId={first(params.teamId)}
-      signature={first(params.signature)}
       token={first(params.token)}
       email={first(params.email)}
       mode={mode}

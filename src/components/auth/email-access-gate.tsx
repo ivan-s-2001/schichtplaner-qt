@@ -6,9 +6,6 @@ import { useRouter } from "next/navigation";
 import { LockKeyhole } from "lucide-react";
 
 interface EmailAccessGateProps {
-  userId: string | null;
-  teamId: string | null;
-  signature: string | null;
   token: string | null;
   email: string | null;
   mode: "schedule" | "vacations";
@@ -21,15 +18,13 @@ function projectPath(mode: "schedule" | "vacations") {
 }
 
 function setProjectMode(mode: "schedule" | "vacations") {
-  document.cookie = `schedule-project-mode=${mode}; Path=/; Max-Age=2592000; SameSite=Lax`;
-  document.cookie = "schedule-embedded=; Path=/; Max-Age=0; SameSite=Lax";
-  document.cookie = "schedule-last-path=; Path=/; Max-Age=0; SameSite=Lax";
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `schedule-project-mode=${mode}; Path=/; Max-Age=2592000; SameSite=Lax${secure}`;
+  document.cookie = `schedule-embedded=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
+  document.cookie = `schedule-last-path=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
 }
 
 export function EmailAccessGate({
-  userId,
-  teamId,
-  signature,
   token,
   email,
   mode,
@@ -41,32 +36,25 @@ export function EmailAccessGate({
     let cancelled = false;
 
     async function authorize() {
-      const hasSignedIdentity = Boolean(userId && teamId && signature);
-      if (!hasSignedIdentity && !token && !email) {
+      if (!token && !email) {
         if (!cancelled) setState("blocked");
         return;
       }
 
-      const currentSession = await getSession();
-      const currentUserId = currentSession?.user?.id;
-
-      if (hasSignedIdentity && currentUserId === userId) {
-        if (!cancelled) {
-          setProjectMode(mode);
-          router.replace(projectPath(mode));
-          router.refresh();
-        }
-        return;
+      if (token) {
+        window.history.replaceState(
+          window.history.state,
+          "",
+          window.location.pathname
+        );
       }
 
-      if (currentUserId && (!userId || currentUserId !== userId)) {
+      const currentSession = await getSession();
+      if (currentSession?.user?.id) {
         await signOut({ redirect: false });
       }
 
       const result = await signIn("credentials", {
-        userId: userId ?? undefined,
-        teamId: teamId ?? undefined,
-        signature: signature ?? undefined,
         token: token ?? undefined,
         email: email ?? undefined,
         redirect: false,
@@ -91,7 +79,7 @@ export function EmailAccessGate({
     return () => {
       cancelled = true;
     };
-  }, [email, mode, router, signature, teamId, token, userId]);
+  }, [email, mode, router, token]);
 
   if (state === "checking") {
     return (

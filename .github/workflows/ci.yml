@@ -29,12 +29,30 @@ jobs:
           cp .env.symbiosis.example .env.symbiosis
           docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml config >/dev/null
 
+      - name: Validate Caddy configuration
+        run: |
+          docker run --rm \
+            -e OUTLINE_DOMAIN=outline.qt.local \
+            -e SCHEDULE_DOMAIN=schedule.qt.local \
+            -v "$PWD/Caddyfile.symbiosis:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine \
+            caddy validate --config /etc/caddy/Caddyfile
+
+      - name: Parse PowerShell setup scripts
+        shell: pwsh
+        run: |
+          Get-ChildItem scripts/*.ps1 | ForEach-Object {
+            [void][scriptblock]::Create((Get-Content $_.FullName -Raw))
+          }
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
       - run: npm ci --legacy-peer-deps
       - run: npx prisma generate
+      - name: Validate Outline SSO contract
+        run: npm run sso:check
       - name: TypeScript
         id: typecheck
         continue-on-error: true
@@ -52,8 +70,8 @@ jobs:
           exit 1
       - run: npm run build
 
-      - name: Build Schedule Docker image without external build arguments
-        run: docker build --target builder -t schedule-ci .
+      - name: Build complete Schedule Docker image
+        run: docker build -t schedule-ci .
 
   schema-contract:
     runs-on: ubuntu-latest

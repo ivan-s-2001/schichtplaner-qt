@@ -3,13 +3,15 @@ import Credentials from "next-auth/providers/credentials";
 import { db } from "@/lib/db";
 import {
   loadOutlineSessionUser,
-  loadOutlineUserById,
-  verifyOutlineIdentity,
   verifyOutlineToken,
 } from "@/lib/outline-integration";
 import { consumeOutlineSsoToken } from "@/lib/outline-sso-token";
 
 const authSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+
+if (!authSecret) {
+  throw new Error("AUTH_SECRET or NEXTAUTH_SECRET is not configured");
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: authSecret,
@@ -20,45 +22,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Credentials({
       name: "Outline SSO",
       credentials: {
-        userId: { label: "Outline user id", type: "text" },
-        teamId: { label: "Outline workspace id", type: "text" },
-        signature: { label: "Outline signature", type: "text" },
         token: { label: "Outline token", type: "text" },
         email: { label: "Email", type: "email" },
       },
       async authorize(credentials) {
-        const userId =
-          typeof credentials?.userId === "string"
-            ? credentials.userId.trim()
-            : "";
-        const teamId =
-          typeof credentials?.teamId === "string"
-            ? credentials.teamId.trim()
-            : "";
-        const signature =
-          typeof credentials?.signature === "string"
-            ? credentials.signature.trim()
-            : "";
-
-        if (userId || teamId || signature) {
-          if (!userId || !teamId || !signature) return null;
-
-          try {
-            verifyOutlineIdentity(userId, teamId, signature);
-            const user = await loadOutlineUserById(userId, teamId);
-
-            return {
-              id: user.id,
-              email: user.email,
-              name: user.name,
-              image: user.avatarUrl,
-            };
-          } catch (error) {
-            console.error("Outline GET identity failed", error);
-            return null;
-          }
-        }
-
         const token =
           typeof credentials?.token === "string"
             ? credentials.token.trim()

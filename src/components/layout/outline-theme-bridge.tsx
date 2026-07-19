@@ -17,14 +17,35 @@ type OutlineThemePayload = {
   colorScheme: "light" | "dark";
 };
 
+type OutlineThemeBridgeProps = {
+  outlineOrigin: string;
+};
+
 function validCssValue(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-export function OutlineThemeBridge() {
+function normalizeOrigin(value: string): string | null {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+export function OutlineThemeBridge({
+  outlineOrigin,
+}: OutlineThemeBridgeProps) {
   useEffect(() => {
+    const trustedOrigin = normalizeOrigin(outlineOrigin);
+    if (!trustedOrigin) return;
+
     function applyTheme(event: MessageEvent<OutlineThemePayload>) {
-      if (event.source !== window.parent || event.data?.type !== "outline:schedule-theme") {
+      if (
+        event.source !== window.parent ||
+        event.origin !== trustedOrigin ||
+        event.data?.type !== "outline:schedule-theme"
+      ) {
         return;
       }
 
@@ -59,11 +80,14 @@ export function OutlineThemeBridge() {
 
     window.addEventListener("message", applyTheme);
     if (window.parent !== window) {
-      window.parent.postMessage({ type: "schedule:theme-ready" }, "*");
+      window.parent.postMessage(
+        { type: "schedule:theme-ready" },
+        trustedOrigin
+      );
     }
 
     return () => window.removeEventListener("message", applyTheme);
-  }, []);
+  }, [outlineOrigin]);
 
   return null;
 }

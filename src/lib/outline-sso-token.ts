@@ -12,17 +12,17 @@ type ConsumedTokenRow = {
 export async function consumeOutlineSsoToken(
   payload: OutlineTokenPayload
 ): Promise<void> {
-  if (!payload.jti) {
-    throw new Error("Outline token has no identifier");
-  }
-
   await db.$executeRaw`
-    DELETE FROM "outline_sso_tokens"
+    DELETE FROM schedule."outline_sso_tokens"
     WHERE "expiresAt" < CURRENT_TIMESTAMP
   `;
 
   const consumed = await db.$queryRaw<ConsumedTokenRow[]>`
-    INSERT INTO "outline_sso_tokens" ("jti", "expiresAt", "consumedAt")
+    INSERT INTO schedule."outline_sso_tokens" (
+      "jti",
+      "expiresAt",
+      "consumedAt"
+    )
     VALUES (
       ${payload.jti},
       ${new Date(payload.exp * 1000)},

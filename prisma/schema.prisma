@@ -22,16 +22,23 @@ model User {
   createdAt     DateTime
   updatedAt     DateTime
 
-  memberships        OrganizationMember[]
-  divisionMemberships DivisionMember[]
-  notes              EmployeeNote[]       @relation("subject")
-  authoredNotes      EmployeeNote[]       @relation("author")
-  bookings           Booking[]
-  timeRecords        TimeRecord[]
-  absences           Absence[]
-  modRequests        ModRequest[]
-  liveLogs           LiveLog[]
-  dayOffs            ScheduleDayOff[]
+  memberships                OrganizationMember[]
+  divisionMemberships         DivisionMember[]      @relation("divisionMember")
+  assignedDivisionMemberships DivisionMember[]      @relation("divisionAssigner")
+  managedDivisions            Division[]            @relation("divisionManager")
+  createdDivisions            Division[]            @relation("divisionCreator")
+  notes                       EmployeeNote[]        @relation("subject")
+  authoredNotes               EmployeeNote[]        @relation("author")
+  bookings                    Booking[]
+  timeRecords                 TimeRecord[]
+  absences                    Absence[]
+  modRequests                 ModRequest[]
+  liveLogs                    LiveLog[]
+  dayOffs                     ScheduleDayOff[]
+  stableWorkDays              StableWorkDay[]
+  balanceEntries              TimeBalanceEntry[]    @relation("balanceSubject")
+  createdBalanceEntries       TimeBalanceEntry[]    @relation("balanceCreator")
+  approvedBalanceEntries      TimeBalanceEntry[]    @relation("balanceApprover")
 
   @@map("users")
   @@schema("schedule")
@@ -119,33 +126,137 @@ model Branch {
 }
 
 model Division {
-  id             String   @id @db.Uuid
-  organizationId String   @db.Uuid
+  id             String       @id @db.Uuid
+  organizationId String       @db.Uuid
   title          String
   description    String?
   color          String
   isSystem       Boolean
+  scheduleMode   ScheduleMode
+  managerUserId  String?      @db.Uuid
+  createdById    String?      @db.Uuid
   createdAt      DateTime
+  updatedAt      DateTime
   deletedAt      DateTime?
 
-  organization Organization     @relation(fields: [organizationId], references: [id])
+  organization Organization       @relation(fields: [organizationId], references: [id])
+  manager      User?              @relation("divisionManager", fields: [managerUserId], references: [id])
+  createdBy    User?              @relation("divisionCreator", fields: [createdById], references: [id])
   members      DivisionMember[]
   schedules    Schedule[]
   shifts       Shift[]
+  balanceEntries TimeBalanceEntry[]
 
+  @@index([managerUserId])
   @@map("divisions")
   @@schema("schedule")
 }
 
-model DivisionMember {
-  divisionId String @db.Uuid
-  userId     String @db.Uuid
+enum ScheduleMode {
+  SHIFT
+  STABLE
 
-  division Division @relation(fields: [divisionId], references: [id])
-  user     User     @relation(fields: [userId], references: [id])
+  @@schema("schedule")
+}
+
+model DivisionMember {
+  divisionId         String   @db.Uuid
+  userId             String   @db.Uuid
+  dailyTargetMinutes Int      @default(480)
+  weeklyTargetMinutes Int     @default(2400)
+  assignedById       String?  @db.Uuid
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  division   Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  user       User     @relation("divisionMember", fields: [userId], references: [id])
+  assignedBy User?    @relation("divisionAssigner", fields: [assignedById], references: [id])
 
   @@id([divisionId, userId])
+  @@unique([userId])
   @@map("division_members")
+  @@schema("schedule")
+}
+
+model StableWorkDay {
+  id             String   @id
+  userId         String   @db.Uuid
+  dayOfWeek      Int
+  isWorkingDay   Boolean  @default(true)
+  targetMinutes  Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  intervals StableWorkInterval[]
+
+  @@unique([userId, dayOfWeek])
+  @@map("stable_work_days")
+  @@schema("schedule")
+}
+
+model StableWorkInterval {
+  id          String           @id
+  workDayId   String
+  kind        WorkIntervalKind @default(WORK)
+  startMinute Int
+  endMinute   Int
+  sortOrder   Int              @default(0)
+
+  workDay StableWorkDay @relation(fields: [workDayId], references: [id], onDelete: Cascade)
+
+  @@index([workDayId, sortOrder])
+  @@map("stable_work_intervals")
+  @@schema("schedule")
+}
+
+enum WorkIntervalKind {
+  WORK
+  BREAK
+
+  @@schema("schedule")
+}
+
+model TimeBalanceEntry {
+  id           String               @id
+  userId       String               @db.Uuid
+  divisionId   String               @db.Uuid
+  workDate     DateTime             @db.Date
+  kind         TimeBalanceEntryKind
+  minutes      Int
+  note         String?
+  state        ApprovalState        @default(PENDING)
+  createdById  String               @db.Uuid
+  approvedById String?              @db.Uuid
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  user       User     @relation("balanceSubject", fields: [userId], references: [id], onDelete: Cascade)
+  division   Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  createdBy  User     @relation("balanceCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  approvedBy User?    @relation("balanceApprover", fields: [approvedById], references: [id])
+
+  @@index([userId, workDate])
+  @@index([divisionId, state])
+  @@map("time_balance_entries")
+  @@schema("schedule")
+}
+
+enum TimeBalanceEntryKind {
+  OVERTIME
+  SHORTENING
+  BALANCE_USE
+  ADMIN_LEAVE
+  MANUAL_ADJUSTMENT
+
+  @@schema("schedule")
+}
+
+enum ApprovalState {
+  PENDING
+  APPROVED
+  DECLINED
+
   @@schema("schedule")
 }
 
@@ -164,9 +275,9 @@ model Schedule {
   updatedAt      DateTime       @updatedAt
   deletedAt      DateTime?
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  division     Division?    @relation(fields: [divisionId], references: [id])
-  branch       Branch?      @relation(fields: [branchId], references: [id])
+  organization Organization      @relation(fields: [organizationId], references: [id])
+  division     Division?         @relation(fields: [divisionId], references: [id])
+  branch       Branch?           @relation(fields: [branchId], references: [id])
   shifts       Shift[]
   liveSession  LiveSession?
   dayNotes     ScheduleDayNote[]

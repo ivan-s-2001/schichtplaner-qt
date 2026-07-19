@@ -1,122 +1,22 @@
 @echo off
 chcp 65001 >nul
-setlocal EnableExtensions EnableDelayedExpansion
-
+setlocal EnableExtensions
 cd /d "%~dp0.."
-if errorlevel 1 goto :fail
 
-set "APP_PORT=41873"
-set "PORT=%APP_PORT%"
-set "APP_URL=http://localhost:%APP_PORT%"
-set "HEALTH_URL=http://127.0.0.1:%APP_PORT%"
-set "NEXTAUTH_URL=%APP_URL%"
-set "ADMIN_EMAIL=admin@qksr.ru"
-set "OPEN_URL=%APP_URL%/?email=admin%%40qksr.ru"
-
-echo.
-echo [1/9] Переключение на develop...
-git switch develop
-if errorlevel 1 goto :fail
-
-echo.
-echo [2/9] Получение изменений...
-git pull --ff-only origin develop
-if errorlevel 1 goto :fail
-
-echo.
-echo [3/9] Установка новых зависимостей...
-call npm install
-if errorlevel 1 goto :fail
-
-echo.
-echo [4/9] Обновление Prisma Client...
-call npx prisma generate
-if errorlevel 1 goto :fail
-
-echo.
-echo [5/9] Применение только невыполненных миграций...
-call npx prisma migrate deploy
-if errorlevel 1 goto :fail
-
-echo.
-echo [6/9] Синхронизация данных Excel и пула смен...
-if not exist "scripts\migration\care-cell-statuses-2026.json" (
-  echo ОШИБКА: не найден scripts\migration\care-cell-statuses-2026.json
-  echo Распакуйте приватный архив в корень проекта.
-  goto :fail
-)
-call npx tsx --env-file=.env scripts/migration/import-care-cell-statuses.ts --apply
-if errorlevel 1 goto :fail
-call npx tsx --env-file=.env scripts/migration/sync-shift-pool-snapshots.ts
-if errorlevel 1 goto :fail
-
-echo.
-echo [7/9] Остановка предыдущего сервера на порту %APP_PORT%...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$connections = @(Get-NetTCPConnection -LocalPort %APP_PORT% -State Listen -ErrorAction SilentlyContinue); foreach ($connection in $connections) { try { Stop-Process -Id $connection.OwningProcess -Force -ErrorAction Stop } catch { Write-Host ('Не удалось остановить PID ' + $connection.OwningProcess + ': ' + $_.Exception.Message) } }; exit 0"
-
-set "PORT_FREE=0"
-for /L %%I in (1,1,15) do (
-  powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort %APP_PORT% -State Listen -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }" >nul 2>&1
-  if not errorlevel 1 (
-    set "PORT_FREE=1"
-    goto :port_free
-  )
-  timeout /t 1 /nobreak >nul
+if not exist "docker-symbiosis-up.bat" (
+  echo ERROR: docker-symbiosis-up.bat was not found.
+  pause
+  exit /b 1
 )
 
-:port_free
-if not "%PORT_FREE%"=="1" (
-  echo Порт %APP_PORT% не освободился.
-  powershell -NoProfile -Command "$connections = @(Get-NetTCPConnection -LocalPort %APP_PORT% -State Listen -ErrorAction SilentlyContinue); foreach ($connection in $connections) { Write-Host ('Порт занят процессом PID ' + $connection.OwningProcess) }"
-  goto :fail
-)
-
-echo.
-echo [8/9] Пересборка приложения на порту %APP_PORT%...
-call npm run build
-if errorlevel 1 goto :fail
-
-echo.
-echo [9/9] Запуск собранного приложения...
-start "Schichtplaner" cmd /k "set NODE_ENV=production&& set PORT=%APP_PORT%&& set APP_URL=%APP_URL%&& set NEXTAUTH_URL=%NEXTAUTH_URL%&& npx tsx --env-file=.env server.ts"
-if errorlevel 1 goto :fail
-
-echo Ожидание запуска сервера на порту %APP_PORT%...
-set "SERVER_READY=0"
-for /L %%I in (1,1,90) do (
-  powershell -NoProfile -Command "try { $response = Invoke-WebRequest -UseBasicParsing -Uri '%HEALTH_URL%' -TimeoutSec 2; exit 0 } catch { if ($_.Exception.Response) { exit 0 } else { exit 1 } }" >nul 2>&1
-  if not errorlevel 1 (
-    set "SERVER_READY=1"
-    goto :server_ready
-  )
-  timeout /t 1 /nobreak >nul
-)
-
-:server_ready
-if not "%SERVER_READY%"=="1" (
-  echo.
-  echo Сервер не ответил на порту %APP_PORT% за 90 секунд.
-  echo Проверьте отдельное окно Schichtplaner: там находится точная ошибка запуска.
-  goto :fail
-)
-
-start "" "%OPEN_URL%"
-
-echo.
-echo ============================================================
-echo ОБНОВЛЕНИЕ ЗАВЕРШЕНО. ДАННЫЕ БАЗЫ СОХРАНЕНЫ.
-echo ПРИЛОЖЕНИЕ ЗАПУЩЕНО: %APP_URL%
-echo АВТОВХОД: %ADMIN_EMAIL%
-echo ============================================================
-pause
-exit /b 0
-
-:fail
+echo Updating and rebuilding the supported Outline + Schedule stack...
+call docker-symbiosis-up.bat
 set "EXIT_CODE=%ERRORLEVEL%"
-if "%EXIT_CODE%"=="0" set "EXIT_CODE=1"
-echo.
-echo ============================================================
-echo ОШИБКА ОБНОВЛЕНИЯ. КОД: %EXIT_CODE%
-echo ============================================================
-pause
+
+if not "%EXIT_CODE%"=="0" (
+  echo.
+  echo Symbiosis update failed with code %EXIT_CODE%.
+  pause
+)
+
 exit /b %EXIT_CODE%
