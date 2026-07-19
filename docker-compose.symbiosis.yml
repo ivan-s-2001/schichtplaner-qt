@@ -93,13 +93,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: builder
+      target: migrator
     environment:
       DATABASE_URL: postgresql://outline:${POSTGRES_PASSWORD:-outline}@postgres:5432/outline?schema=schedule
     depends_on:
       postgres-init:
         condition: service_completed_successfully
-    command: ["npx", "prisma", "migrate", "deploy"]
     restart: "no"
 
   schedule:
