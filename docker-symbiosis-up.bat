@@ -4,7 +4,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 if not exist ".env.symbiosis" (
-  echo Creating schedule .env.symbiosis with random secrets...
+  echo Creating Docker .env.symbiosis with random secrets...
   powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\create-symbiosis-env.ps1"
   if errorlevel 1 goto :fail
 )
@@ -18,16 +18,23 @@ if not exist "..\outline.qt.local\package.json" (
 )
 
 if not exist "..\outline.qt.local\.env" (
-  echo Creating Outline .env for local Docker launch...
+  echo Creating Outline .env for Docker...
   powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\create-outline-env.ps1"
   if errorlevel 1 goto :fail
 )
 
-echo Building and starting Outline + Schedule...
+set "OUTLINE_PORT=3000"
+set "SCHEDULE_PORT=41873"
+set "MAILPIT_PORT=8025"
+for /f "usebackq eol=# tokens=1,* delims==" %%A in (".env.symbiosis") do (
+  if not "%%A"=="" set "%%A=%%B"
+)
+
+echo Building and starting the Docker stack...
 docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml up -d --build
 if errorlevel 1 goto :fail
 
-echo Waiting for Outline migrations and both applications...
+echo Waiting for migrations and application health checks...
 set "READY=0"
 for /L %%I in (1,1,120) do (
   call docker-symbiosis-check.bat >nul 2>&1
@@ -49,17 +56,19 @@ call docker-symbiosis-check.bat
 if errorlevel 1 goto :fail
 
 echo.
-echo Outline:  http://localhost:3000
-echo Schedule: http://localhost:41873
-echo Mailpit:  http://localhost:8025
+echo Outline:  http://localhost:!OUTLINE_PORT!
+echo Schedule: http://localhost:!SCHEDULE_PORT!
+echo Mailpit:  http://localhost:!MAILPIT_PORT!
 echo.
+echo The C:\OSPanel\home folder is used only as a storage location.
+echo Open Server is not required and is not used.
 echo Sign in to Outline by email, then open the login message in Mailpit.
-echo Open Schedule only through the Outline sidebar.
-start "" "http://localhost:3000"
+echo Open Schedule through the Outline sidebar.
+start "" "http://localhost:!OUTLINE_PORT!"
 exit /b 0
 
 :fail
 echo.
-echo Shared Docker stack failed to start.
+echo Docker stack failed to start.
 pause
 exit /b 1
