@@ -20,18 +20,14 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  memberships       OrganizationMember[]
-  sentMessages      Message[]            @relation("sender")
-  messageRecipients MessageRecipient[]
-  notes             EmployeeNote[]       @relation("subject")
-  authoredNotes     EmployeeNote[]       @relation("author")
-  bookings          Booking[]
-  timeRecords       TimeRecord[]
-  absences          Absence[]
-  modRequests       ModRequest[]
-  liveLogs          LiveLog[]
-  topicPosts        TopicPost[]
-  uploadedFiles     PortalFile[]
+  memberships   OrganizationMember[]
+  notes         EmployeeNote[]       @relation("subject")
+  authoredNotes EmployeeNote[]       @relation("author")
+  bookings      Booking[]
+  timeRecords   TimeRecord[]
+  absences      Absence[]
+  modRequests   ModRequest[]
+  liveLogs      LiveLog[]
 
   @@map("users")
 }
@@ -55,14 +51,14 @@ model VerificationToken {
 }
 
 model Organization {
-  id           String   @id @default(cuid())
-  name         String
-  address      String?
-  nameFormat   NameFormat @default(LASTNAME_FIRSTNAME)
+  id                 String             @id @default(cuid())
+  name               String
+  address            String?
+  nameFormat         NameFormat         @default(LASTNAME_FIRSTNAME)
   scheduleVisibility ScheduleVisibility @default(ALL)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  deletedAt    DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  deletedAt          DateTime?
 
   members           OrganizationMember[]
   branches          Branch[]
@@ -71,25 +67,20 @@ model Organization {
   timeCategories    TimeCategory[]
   timeSettings      TimeSettings?
   absenceCategories AbsenceCategory[]
-  messages          Message[]
-  portalFolders     PortalFolder[]
-  portalFiles       PortalFile[]
-  topics            Topic[]
   holidays          Holiday[]
-  settings          OrgSettings?
 
   @@map("organizations")
 }
 
 model OrganizationMember {
-  id             String   @id @default(cuid())
-  organizationId String
-  userId         String
-  role           OrgRole  @default(EMPLOYEE)
-  isActive       Boolean  @default(true)
-  isActivated    Boolean  @default(false)
-  activationToken String? @unique
-  joinedAt       DateTime @default(now())
+  id              String   @id @default(cuid())
+  organizationId  String
+  userId          String
+  role            OrgRole  @default(EMPLOYEE)
+  isActive        Boolean  @default(true)
+  isActivated     Boolean  @default(false)
+  activationToken String?  @unique
+  joinedAt        DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -141,8 +132,9 @@ model Division {
   createdAt      DateTime @default(now())
   deletedAt      DateTime?
 
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   members      DivisionMember[]
+  schedules    Schedule[]
   shifts       Shift[]
 
   @@map("divisions")
@@ -159,26 +151,28 @@ model DivisionMember {
 }
 
 model Schedule {
-  id             String   @id @default(cuid())
+  id             String         @id @default(cuid())
   organizationId String
+  divisionId     String?
   branchId       String?
   weekNumber     Int
   year           Int
-  isPublic       Boolean  @default(false)
+  isPublic       Boolean        @default(false)
   settingsLayout ScheduleLayout @default(LAYOUT_1)
-  showTitle      Boolean  @default(true)
-  showPauses     Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  showTitle      Boolean        @default(true)
+  showPauses     Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
   deletedAt      DateTime?
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  branch       Branch?       @relation(fields: [branchId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  division     Division?    @relation(fields: [divisionId], references: [id])
+  branch       Branch?      @relation(fields: [branchId], references: [id])
   shifts       Shift[]
-  briefings    Briefing[]
   liveSession  LiveSession?
 
-  @@unique([organizationId, weekNumber, year, branchId])
+  @@unique([organizationId, divisionId, weekNumber, year, branchId])
+  @@index([organizationId, divisionId, year, weekNumber])
   @@map("schedules")
 }
 
@@ -188,18 +182,18 @@ enum ScheduleLayout {
 }
 
 model Shift {
-  id           String   @id @default(cuid())
+  id           String      @id @default(cuid())
   scheduleId   String
   divisionId   String?
   dayOfWeek    Int
   shiftFrom    String
   shiftTo      String
-  maxEmployees Int      @default(1)
+  maxEmployees Int         @default(1)
   pauseOption  PauseOption @default(PER_HOUR)
-  pauseValue   Int      @default(0)
+  pauseValue   Int         @default(0)
   title        String?
   description  String?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime    @default(now())
   deletedAt    DateTime?
 
   schedule    Schedule     @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
@@ -230,13 +224,13 @@ model Booking {
 }
 
 model ModRequest {
-  id        String        @id @default(cuid())
-  shiftId   String
-  userId    String
-  state     RequestState  @default(OPEN)
-  note      String?
-  deadline  DateTime?
-  sentAt    DateTime      @default(now())
+  id       String       @id @default(cuid())
+  shiftId  String
+  userId   String
+  state    RequestState @default(OPEN)
+  note     String?
+  deadline DateTime?
+  sentAt   DateTime     @default(now())
 
   shift Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -251,29 +245,17 @@ enum RequestState {
   DECLINED
 }
 
-model Briefing {
-  id         String   @id @default(cuid())
-  scheduleId String
-  text       String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
-
-  @@map("briefings")
-}
-
 model LiveSession {
-  id              String   @id @default(cuid())
-  scheduleId      String   @unique
-  isActive        Boolean  @default(true)
-  deadline        DateTime?
-  autoStop        Boolean  @default(false)
-  allowExceeds    Boolean  @default(false)
-  bookRequests    Boolean  @default(false)
-  startedAt       DateTime @default(now())
+  id           String   @id @default(cuid())
+  scheduleId   String   @unique
+  isActive     Boolean  @default(true)
+  deadline     DateTime?
+  autoStop     Boolean  @default(false)
+  allowExceeds Boolean  @default(false)
+  bookRequests Boolean  @default(false)
+  startedAt    DateTime @default(now())
 
-  schedule Schedule   @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  schedule Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   days     LiveDay[]
   logs     LiveLog[]
 
@@ -293,12 +275,12 @@ model LiveDay {
 }
 
 model LiveLog {
-  id            String   @id @default(cuid())
+  id            String     @id @default(cuid())
   liveSessionId String
   shiftId       String
   userId        String
   action        LiveAction
-  loggedAt      DateTime @default(now())
+  loggedAt      DateTime   @default(now())
 
   liveSession LiveSession @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
   user        User        @relation(fields: [userId], references: [id])
@@ -312,18 +294,18 @@ enum LiveAction {
 }
 
 model TimeRecord {
-  id             String       @id @default(cuid())
-  userId         String
-  date           DateTime     @db.Date
-  timeFrom       String?
-  timeTo         String?
-  durationHours  Int?
+  id              String         @id @default(cuid())
+  userId          String
+  date            DateTime       @db.Date
+  timeFrom        String?
+  timeTo          String?
+  durationHours   Int?
   durationMinutes Int?
-  type           TimeRecordType
-  categoryId     String?
-  comment        String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  type            TimeRecordType
+  categoryId      String?
+  comment         String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   category TimeCategory? @relation(fields: [categoryId], references: [id])
@@ -338,10 +320,10 @@ enum TimeRecordType {
 }
 
 model TimeCategory {
-  id             String   @id @default(cuid())
+  id             String  @id @default(cuid())
   organizationId String
   name           String
-  enabled        Boolean  @default(true)
+  enabled        Boolean @default(true)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   records      TimeRecord[]
@@ -350,14 +332,14 @@ model TimeCategory {
 }
 
 model TimeSettings {
-  id               String   @id @default(cuid())
-  organizationId   String   @unique
+  id               String    @id @default(cuid())
+  organizationId   String    @unique
   trackingOptions  String?
-  watchAutoStop    Boolean  @default(false)
-  warningsEnabled  Boolean  @default(false)
-  warningsMaxHours Int      @default(10)
+  watchAutoStop    Boolean   @default(false)
+  warningsEnabled  Boolean   @default(false)
+  warningsMaxHours Int       @default(10)
   whoCanUse        WhoCanUse @default(ALL)
-  useCategories    Boolean  @default(false)
+  useCategories    Boolean   @default(false)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -370,14 +352,14 @@ enum WhoCanUse {
 }
 
 model Absence {
-  id         String       @id @default(cuid())
+  id         String        @id @default(cuid())
   userId     String
   categoryId String
-  dateFrom   DateTime     @db.Date
-  dateTo     DateTime     @db.Date
+  dateFrom   DateTime      @db.Date
+  dateTo     DateTime      @db.Date
   note       String?
   status     AbsenceStatus @default(PENDING)
-  createdAt  DateTime     @default(now())
+  createdAt  DateTime      @default(now())
 
   user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   category AbsenceCategory @relation(fields: [categoryId], references: [id])
@@ -392,11 +374,11 @@ enum AbsenceStatus {
 }
 
 model AbsenceCategory {
-  id             String   @id @default(cuid())
+  id             String  @id @default(cuid())
   organizationId String
   name           String
-  color          String   @default("#ef4444")
-  isPaid         Boolean  @default(true)
+  color          String  @default("#ef4444")
+  isPaid         Boolean @default(true)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   absences     Absence[]
@@ -417,121 +399,15 @@ model Holiday {
   @@map("holidays")
 }
 
-model Message {
-  id             String   @id @default(cuid())
-  organizationId String
-  senderId       String
-  subject        String
-  body           String
-  parentId       String?
-  createdAt      DateTime @default(now())
-
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  sender       User               @relation("sender", fields: [senderId], references: [id])
-  parent       Message?           @relation("replies", fields: [parentId], references: [id])
-  replies      Message[]          @relation("replies")
-  recipients   MessageRecipient[]
-
-  @@map("messages")
-}
-
-model MessageRecipient {
-  messageId String
-  userId    String
-  isRead    Boolean @default(false)
-  isDeleted Boolean @default(false)
-
-  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([messageId, userId])
-  @@map("message_recipients")
-}
-
-model PortalFolder {
-  id             String   @id @default(cuid())
-  organizationId String
-  parentId       String?
-  name           String
-  createdAt      DateTime @default(now())
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent       PortalFolder? @relation("subfolders", fields: [parentId], references: [id])
-  children     PortalFolder[] @relation("subfolders")
-  files        PortalFile[]
-
-  @@map("portal_folders")
-}
-
-model PortalFile {
-  id             String   @id @default(cuid())
-  organizationId String
-  folderId       String?
-  name           String
-  path           String
-  size           Int
-  mimeType       String?
-  uploadedById   String
-  createdAt      DateTime @default(now())
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  folder       PortalFolder? @relation(fields: [folderId], references: [id])
-  uploadedBy   User          @relation(fields: [uploadedById], references: [id])
-
-  @@map("portal_files")
-}
-
-model Topic {
-  id             String   @id @default(cuid())
-  organizationId String
-  title          String
-  createdById    String
-  createdAt      DateTime @default(now())
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  posts        TopicPost[]
-
-  @@map("topics")
-}
-
-model TopicPost {
+model EmployeeNote {
   id        String   @id @default(cuid())
-  topicId   String
-  userId    String
+  subjectId String
+  authorId  String
   text      String
   createdAt DateTime @default(now())
-
-  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id])
-
-  @@map("topic_posts")
-}
-
-model EmployeeNote {
-  id         String   @id @default(cuid())
-  subjectId  String
-  authorId   String
-  text       String
-  createdAt  DateTime @default(now())
 
   subject User @relation("subject", fields: [subjectId], references: [id], onDelete: Cascade)
   author  User @relation("author", fields: [authorId], references: [id])
 
   @@map("employee_notes")
-}
-
-model OrgSettings {
-  id                String  @id @default(cuid())
-  organizationId    String  @unique
-  aiEnabled         Boolean @default(true)
-  aiAutoPlanner     Boolean @default(true)
-  aiAnomalyDetection Boolean @default(true)
-  aiChatEnabled     Boolean @default(true)
-  aiForecast        Boolean @default(true)
-  aiSmartBriefing   Boolean @default(true)
-  smsEnabled        Boolean @default(false)
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@map("org_settings")
 }
