@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
 import { getSelectedDivision } from "@/lib/selected-division";
 import { emitToOrg, emitToSchedule } from "@/lib/emit";
 
@@ -10,7 +10,7 @@ const overtimeHoursSchema = z.number().min(0).max(24).multipleOf(0.5);
 
 const assignmentBaseSchema = z.object({
   scheduleId: z.string().min(1),
-  userId: z.string().min(1),
+  userId: z.string().uuid(),
   dayOfWeek: z.number().int().min(1).max(7),
   templateId: z.string().min(1),
   overtimeBeforeHours: overtimeHoursSchema.default(0),
@@ -37,7 +37,7 @@ const assignmentSchema = assignmentBaseSchema.superRefine((value, context) => {
 
 const removeSchema = z.object({
   scheduleId: z.string().min(1),
-  userId: z.string().min(1),
+  userId: z.string().uuid(),
   dayOfWeek: z.number().int().min(1).max(7),
 });
 
@@ -51,16 +51,11 @@ type ShiftPoolRow = {
   description: string | null;
 };
 
-async function requireManager(request: NextRequest) {
+async function requireDivisionAccess(request: NextRequest) {
   const member = await getCurrentMember();
   if (!member) {
     return {
       error: NextResponse.json({ error: "Не авторизован" }, { status: 401 }),
-    };
-  }
-  if (!isManagerOrAbove(member.role)) {
-    return {
-      error: NextResponse.json({ error: "Недостаточно прав" }, { status: 403 }),
     };
   }
 
@@ -71,11 +66,31 @@ async function requireManager(request: NextRequest) {
   );
   if (!division) {
     return {
-      error: NextResponse.json({ error: "Нет доступного отдела" }, { status: 403 }),
+      error: NextResponse.json(
+        { error: "Нет доступного подразделения" },
+        { status: 403 }
+      ),
+    };
+  }
+  if (division.scheduleMode !== "SHIFT") {
+    return {
+      error: NextResponse.json(
+        { error: "Выбранное подразделение не использует сменный график" },
+        { status: 409 }
+      ),
     };
   }
 
-  return { member, division };
+  const canManage = isAdminOrAbove(member.role) || division.isManager;
+  return { member, division, canManage };
+}
+
+function canEditUser(
+  currentUserId: string,
+  targetUserId: string,
+  canManage: boolean
+) {
+  return canManage || currentUserId === targetUserId;
 }
 
 async function removeExistingAssignment(
@@ -109,7 +124,9 @@ async function removeExistingAssignment(
 
   for (const booking of bookings) {
     if (!booking.shift.title?.startsWith("pool:")) continue;
-    const remaining = await tx.booking.count({ where: { shiftId: booking.shiftId } });
+    const remaining = await tx.booking.count({
+      where: { shiftId: booking.shiftId },
+    });
     if (remaining === 0) {
       await tx.shift.update({
         where: { id: booking.shiftId },
@@ -145,7 +162,7 @@ async function validateScheduleAndUser(
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireManager(request);
+  const access = await requireDivisionAccess(request);
   if ("error" in access) return access.error;
 
   const parsed = assignmentSchema.safeParse(
@@ -158,7 +175,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { member, division } = access;
+  const { member, division, canManage } = access;
   const {
     scheduleId,
     userId,
@@ -169,6 +186,13 @@ export async function POST(request: NextRequest) {
     overtimeHours,
   } = parsed.data;
 
+  if (!canEditUser(member.userId, userId, canManage)) {
+    return NextResponse.json(
+      { error: "Можно изменять только собственную строку" },
+      { status: 403 }
+    );
+  }
+
   const { schedule, divisionMember } = await validateScheduleAndUser(
     scheduleId,
     userId,
@@ -176,11 +200,14 @@ export async function POST(request: NextRequest) {
     division.id
   );
   if (!schedule) {
-    return NextResponse.json({ error: "График отдела не найден" }, { status: 404 });
+    return NextResponse.json(
+      { error: "График подразделения не найден" },
+      { status: 404 }
+    );
   }
   if (!divisionMember) {
     return NextResponse.json(
-      { error: "Сотрудник не состоит в выбранном отделе" },
+      { error: "Сотрудник не состоит в выбранном подразделении" },
       { status: 404 }
     );
   }
@@ -188,15 +215,18 @@ export async function POST(request: NextRequest) {
   const templates = await db.$queryRaw<ShiftPoolRow[]>`
     SELECT
       "code", "name", "shiftFrom", "shiftTo", "color", "textColor", "description"
-    FROM "shift_pool_templates"
-    WHERE "organizationId" = ${member.organizationId}
+    FROM schedule."shift_pool_templates"
+    WHERE "organizationId" = CAST(${member.organizationId} AS uuid)
       AND "code" = ${templateId}
       AND "isActive" = true
     LIMIT 1
   `;
   const template = templates[0];
   if (!template) {
-    return NextResponse.json({ error: "Смена отсутствует в пуле" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Смена отсутствует в пуле" },
+      { status: 400 }
+    );
   }
 
   const legacyAfterHours =
@@ -249,7 +279,7 @@ export async function POST(request: NextRequest) {
     }
 
     await tx.$executeRaw`
-      UPDATE "shifts"
+      UPDATE schedule."shifts"
       SET
         "poolTemplateCode" = ${template.code},
         "poolLabel" = ${template.name},
@@ -263,12 +293,12 @@ export async function POST(request: NextRequest) {
       data: {
         shiftId: shift.id,
         userId,
-        bookedBy: member.user.id,
+        bookedBy: member.userId,
       },
     });
 
     await tx.$executeRaw`
-      UPDATE "bookings"
+      UPDATE schedule."bookings"
       SET
         "overtimeMinutes" = ${overtimeMinutes},
         "overtimeBeforeMinutes" = ${overtimeBeforeMinutes},
@@ -299,7 +329,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const access = await requireManager(request);
+  const access = await requireDivisionAccess(request);
   if ("error" in access) return access.error;
 
   const parsed = removeSchema.safeParse(
@@ -312,8 +342,15 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
-  const { member, division } = access;
+  const { member, division, canManage } = access;
   const { scheduleId, userId, dayOfWeek } = parsed.data;
+  if (!canEditUser(member.userId, userId, canManage)) {
+    return NextResponse.json(
+      { error: "Можно изменять только собственную строку" },
+      { status: 403 }
+    );
+  }
+
   const { schedule, divisionMember } = await validateScheduleAndUser(
     scheduleId,
     userId,
