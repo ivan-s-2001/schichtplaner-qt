@@ -26,6 +26,7 @@
     "start": "node server.cjs",
     "lint": "eslint",
     "i18n:check": "node scripts/normalize-russian-ui.mjs",
+    "sso:check": "tsx scripts/check-outline-sso-contract.ts",
     "dev:server": "node --watch server.cjs",
     "start:server": "node server.cjs"
   },
