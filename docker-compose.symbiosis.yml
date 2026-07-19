@@ -52,7 +52,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       FILE_STORAGE: local
       FILE_STORAGE_LOCAL_ROOT_DIR: /var/lib/outline/data
-      FORCE_HTTPS: "true"
+      FORCE_HTTPS: "false"
       PROXY_HEADERS_TRUSTED: "true"
       SCHEDULE_URL: ${SCHEDULE_URL:-https://schedule.qt.local}
       SCHEDULE_SSO_SECRET: ${SCHEDULE_SSO_SECRET}
