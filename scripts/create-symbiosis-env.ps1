@@ -18,8 +18,6 @@ function New-HexSecret([int]$bytes = 32) {
 $content = Get-Content $templatePath -Raw
 $content = $content -replace '(?m)^SCHEDULE_SSO_SECRET=.*$', "SCHEDULE_SSO_SECRET=$(New-HexSecret 32)"
 $content = $content -replace '(?m)^NEXTAUTH_SECRET=.*$', "NEXTAUTH_SECRET=$(New-HexSecret 32)"
-$content = $content -replace '(?m)^SECRET_KEY=.*$', "SECRET_KEY=$(New-HexSecret 32)"
-$content = $content -replace '(?m)^UTILS_SECRET=.*$', "UTILS_SECRET=$(New-HexSecret 32)"
 
 [System.IO.File]::WriteAllText(
     $targetPath,
@@ -27,4 +25,4 @@ $content = $content -replace '(?m)^UTILS_SECRET=.*$', "UTILS_SECRET=$(New-HexSec
     [System.Text.UTF8Encoding]::new($false)
 )
 
-Write-Host "Created $targetPath with random local secrets."
+Write-Host "Created $targetPath with random scheduling secrets."
