@@ -63,46 +63,66 @@
   --primary-foreground: #ffffff;
   --destructive: #ed2651;
   --border: #dae1e9;
-  --input: #c6d3e1;
-  --ring: #0366d6;
-  --outline-host-neutral: #eef2f6;
-  --outline-host-neutral-hover: #dee5ed;
+  --input: #dae1e9;
+  --ring: #66778f;
+  --card: #ffffff;
+  --card-foreground: #111319;
+  --popover: #ffffff;
+  --popover-foreground: #111319;
+  --secondary: #ffffff;
+  --secondary-foreground: #111319;
+  --muted: hsl(212 31% 95% / 1);
+  --muted-foreground: #394351;
+  --accent: hsl(212 31% 95% / 1);
+  --accent-foreground: #111319;
 
-  --card: var(--background);
-  --card-foreground: var(--foreground);
-  --popover: var(--background);
-  --popover-foreground: var(--foreground);
-  --secondary: var(--outline-host-neutral);
-  --secondary-foreground: var(--foreground);
-  --muted: color-mix(in srgb, var(--foreground) 4%, var(--background));
-  --muted-foreground: color-mix(in srgb, var(--foreground) 68%, var(--background));
-  --accent: var(--outline-host-neutral-hover);
-  --accent-foreground: var(--foreground);
-  --chart-1: var(--primary);
+  --outline-background-secondary: hsl(212 31% 95% / 1);
+  --outline-text-secondary: #394351;
+  --outline-text-tertiary: #66778f;
+  --outline-placeholder: #a2b2c3;
+  --outline-divider: #dae1e9;
+  --outline-input-border: #dae1e9;
+  --outline-input-border-focused: #66778f;
+  --outline-button-neutral-background: #ffffff;
+  --outline-button-neutral-hover: hsl(212 31% 95% / 1);
+  --outline-button-neutral-text: #111319;
+  --outline-button-neutral-border: hsl(212 31% 88% / 1);
+  --outline-modal-background: #ffffff;
+  --outline-modal-backdrop: rgba(0, 0, 0, 0.25);
+  --outline-modal-shadow:
+    0 4px 8px rgb(0 0 0 / 8%), 0 2px 4px rgb(0 0 0 / 0%),
+    0 30px 40px rgb(0 0 0 / 8%);
+  --outline-menu-background: #ffffff;
+  --outline-menu-shadow:
+    0 0 0 1px rgb(0 0 0 / 2%), 0 4px 8px rgb(0 0 0 / 8%),
+    0 2px 4px rgb(0 0 0 / 0%), 0 30px 40px rgb(0 0 0 / 8%);
+  --outline-control-hover: rgb(138 164 193 / 20%);
+
+  --chart-1: #0366d6;
   --chart-2: #3ad984;
   --chart-3: #f08a24;
   --chart-4: #9e5cf7;
   --chart-5: #2bc2ff;
-  --sidebar: var(--outline-host-neutral);
+  --sidebar: var(--outline-background-secondary);
   --sidebar-foreground: var(--foreground);
-  --sidebar-primary: var(--outline-host-neutral-hover);
+  --sidebar-primary: var(--outline-button-neutral-hover);
   --sidebar-primary-foreground: var(--foreground);
-  --sidebar-accent: var(--outline-host-neutral-hover);
+  --sidebar-accent: var(--outline-button-neutral-hover);
   --sidebar-accent-foreground: var(--foreground);
-  --sidebar-border: var(--border);
+  --sidebar-border: var(--outline-divider);
   --sidebar-ring: var(--ring);
 
   --outline-almost-black: var(--foreground);
-  --outline-light-black: color-mix(in srgb, var(--foreground) 84%, var(--background));
+  --outline-light-black: var(--outline-text-secondary);
   --outline-white: var(--background);
   --outline-accent: var(--primary);
-  --outline-accent-hover: color-mix(in srgb, var(--primary) 88%, #000000);
-  --outline-slate: var(--muted-foreground);
-  --outline-slate-light: var(--border);
-  --outline-slate-dark: color-mix(in srgb, var(--foreground) 76%, var(--background));
-  --outline-smoke: var(--muted);
-  --outline-smoke-light: color-mix(in srgb, var(--foreground) 2%, var(--background));
-  --outline-smoke-dark: color-mix(in srgb, var(--foreground) 8%, var(--background));
+  --outline-accent-hover: color-mix(in srgb, var(--primary) 95%, #000000);
+  --outline-slate: var(--outline-text-tertiary);
+  --outline-slate-light: var(--outline-divider);
+  --outline-slate-dark: var(--outline-text-secondary);
+  --outline-smoke: var(--outline-background-secondary);
+  --outline-smoke-light: var(--background);
+  --outline-smoke-dark: var(--outline-divider);
   --outline-danger: var(--destructive);
   --outline-warning: #f08a24;
   --outline-success: #3ad984;
@@ -112,16 +132,46 @@
 .dark,
 :root[data-outline-host-theme="dark"] {
   color-scheme: dark;
-  --background: #191b20;
-  --foreground: #f2f3f5;
-  --primary: #5b9df9;
+  --background: #111319;
+  --foreground: #e6e6e6;
+  --primary: #137ffb;
   --primary-foreground: #ffffff;
-  --destructive: #ff5576;
-  --border: #353941;
-  --input: #454a54;
-  --ring: #5b9df9;
-  --outline-host-neutral: #24272e;
-  --outline-host-neutral-hover: #30343c;
+  --destructive: #ed2651;
+  --border: #292d33;
+  --input: #394351;
+  --ring: #66778f;
+  --card: #111319;
+  --card-foreground: #e6e6e6;
+  --popover: #181c25;
+  --popover-foreground: #e6e6e6;
+  --secondary: #111319;
+  --secondary-foreground: #ffffff;
+  --muted: #1f232e;
+  --muted-foreground: #7d8da3;
+  --accent: #20242c;
+  --accent-foreground: #e6e6e6;
+
+  --outline-background-secondary: #1f232e;
+  --outline-text-secondary: #7d8da3;
+  --outline-text-tertiary: #66778f;
+  --outline-placeholder: hsl(215 17% 30% / 1);
+  --outline-divider: #292d33;
+  --outline-input-border: #394351;
+  --outline-input-border-focused: #66778f;
+  --outline-button-neutral-background: #111319;
+  --outline-button-neutral-hover: #20242c;
+  --outline-button-neutral-text: #ffffff;
+  --outline-button-neutral-border: #394351;
+  --outline-modal-background: #181c25;
+  --outline-modal-backdrop: rgba(0, 0, 0, 0.5);
+  --outline-modal-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.1), 0 8px 16px rgba(0, 0, 0, 0.3),
+    0 2px 4px rgba(0, 0, 0, 0.08);
+  --outline-menu-background: #181c25;
+  --outline-menu-shadow:
+    0 0 0 1px rgb(34 40 52), 0 8px 16px rgba(0, 0, 0, 0.3),
+    0 2px 4px rgba(0, 0, 0, 0.08);
+  --outline-control-hover: rgba(255, 255, 255, 0.1);
 }
 
 @layer base {
@@ -154,18 +204,20 @@
   h5,
   h6 {
     color: var(--foreground);
-    font-weight: 600;
     line-height: 1.25;
-    letter-spacing: -0.01em;
   }
 
-  a,
   button,
   input,
   textarea,
   select {
-    transition-duration: 150ms;
-    transition-timing-function: ease-out;
+    font: inherit;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--outline-placeholder);
+    opacity: 1;
   }
 
   ::selection {
@@ -185,13 +237,6 @@
   }
 }
 
-.outline-native-toolbar {
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-  background: color-mix(in srgb, var(--background) 84%, transparent);
-  backdrop-filter: blur(20px);
-  transform: translate3d(0, 0, 0);
-}
-
 .outline-native-tabs {
   scrollbar-width: none;
 }
@@ -201,61 +246,145 @@
 }
 
 .outline-native-tab {
-  border-radius: 4px 4px 0 0;
   text-decoration: none;
-  transition:
-    color 120ms ease-out,
-    background 120ms ease-out;
-}
-
-.outline-native-tab:hover {
-  background: color-mix(in srgb, var(--outline-host-neutral-hover) 62%, transparent);
+  transition: color 120ms ease-out;
 }
 
 .outline-native-control {
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 6px;
-  background: var(--background);
-  color: var(--foreground);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 7%);
+  background: var(--outline-button-neutral-background);
+  color: var(--outline-button-neutral-text);
+  box-shadow:
+    rgba(0, 0, 0, 0.07) 0 1px 2px,
+    var(--outline-button-neutral-border) 0 0 0 1px inset;
+  transition: background 200ms ease-out;
 }
 
 .outline-native-control:hover {
-  background: var(--outline-host-neutral-hover);
+  background: var(--outline-button-neutral-hover);
+  transition: background 0s;
 }
 
-/* Standard application surfaces follow Outline's flat visual language. */
+.outline-native-control:focus-within {
+  box-shadow:
+    rgba(0, 0, 0, 0.07) 0 1px 2px,
+    var(--outline-input-border-focused) 0 0 0 1px inset;
+}
+
 [data-slot="card"] {
-  border-color: var(--border) !important;
-  border-radius: 6px !important;
-  background: var(--background) !important;
-  box-shadow: none !important;
-}
-
-[data-slot="button"] {
-  border-radius: 6px !important;
-}
-
-[data-slot="input"],
-[data-slot="textarea"],
-[data-slot="select-trigger"] {
+  border: 1px solid var(--outline-divider) !important;
   border-radius: 4px !important;
   background: var(--background) !important;
   box-shadow: none !important;
 }
 
-[data-slot="dialog-overlay"] {
-  background: rgb(0 0 0 / 25%) !important;
+[data-slot="button"] {
+  min-height: 32px;
+  border-radius: 6px !important;
+  font-size: 14px;
+  font-weight: 500;
 }
 
-[data-slot="dialog-content"],
-[data-radix-popper-content-wrapper] > * {
-  border-color: var(--border) !important;
-  border-radius: 8px !important;
-  background: var(--background) !important;
+[data-slot="button"][data-variant="default"] {
+  border: 0 !important;
+  background: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  box-shadow: rgba(0, 0, 0, 0.2) 0 1px 2px !important;
+}
+
+[data-slot="button"][data-variant="default"]:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+[data-slot="button"][data-variant="outline"] {
+  border: 0 !important;
+  background: var(--outline-button-neutral-background) !important;
+  color: var(--outline-button-neutral-text) !important;
   box-shadow:
-    0 4px 8px rgb(0 0 0 / 8%),
-    0 30px 40px rgb(0 0 0 / 8%);
+    rgba(0, 0, 0, 0.07) 0 1px 2px,
+    var(--outline-button-neutral-border) 0 0 0 1px inset !important;
+}
+
+[data-slot="button"][data-variant="outline"]:hover:not(:disabled) {
+  background: var(--outline-button-neutral-hover) !important;
+}
+
+[data-slot="button"][data-variant="secondary"],
+[data-slot="button"][data-variant="ghost"] {
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--outline-button-neutral-text) !important;
+  box-shadow: none !important;
+}
+
+[data-slot="button"][data-variant="secondary"]:hover:not(:disabled),
+[data-slot="button"][data-variant="ghost"]:hover:not(:disabled) {
+  background: var(--outline-control-hover) !important;
+}
+
+[data-slot="button"][data-variant="destructive"] {
+  border: 0 !important;
+  background: var(--destructive) !important;
+  color: #ffffff !important;
+  box-shadow: rgba(0, 0, 0, 0.2) 0 1px 2px !important;
+}
+
+[data-slot="input"],
+[data-slot="textarea"],
+[data-slot="select-trigger"] {
+  border: 1px solid var(--outline-input-border) !important;
+  border-radius: 4px !important;
+  background: var(--background) !important;
+  color: var(--foreground) !important;
+  box-shadow: none !important;
+  font-size: 15px;
+}
+
+[data-slot="input"],
+[data-slot="select-trigger"] {
+  min-height: 32px;
+}
+
+[data-slot="input"]:focus-visible,
+[data-slot="textarea"]:focus-visible,
+[data-slot="select-trigger"]:focus-visible {
+  border-color: var(--outline-input-border-focused) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+[data-slot="dialog-overlay"] {
+  background: var(--outline-modal-backdrop) !important;
+}
+
+[data-slot="dialog-content"] {
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: var(--outline-modal-background) !important;
+  box-shadow: var(--outline-modal-shadow) !important;
+}
+
+[data-slot="dialog-header"] {
+  gap: 4px !important;
+}
+
+[data-slot="dialog-title"] {
+  color: var(--outline-text-secondary) !important;
+  font-size: 18px !important;
+  font-weight: 600 !important;
+}
+
+[data-slot="dialog-description"] {
+  color: var(--outline-text-tertiary) !important;
+  font-size: 14px !important;
+}
+
+[data-radix-popper-content-wrapper] > * {
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: var(--outline-menu-background) !important;
+  box-shadow: var(--outline-menu-shadow) !important;
 }
 
 [data-slot="tooltip-content"] {
@@ -263,19 +392,8 @@
   color: var(--background);
 }
 
-/* Schedule keeps Excel-like cells while using the host theme for structure. */
 .schedule-equal-day-columns {
   color: var(--foreground);
-}
-
-.schedule-equal-day-columns > div,
-.schedule-equal-day-columns details,
-.schedule-equal-day-columns [data-slot="card"] {
-  box-shadow: none;
-}
-
-.schedule-equal-day-columns .text-muted-foreground {
-  color: var(--muted-foreground) !important;
 }
 
 .schedule-equal-day-columns table {
@@ -295,41 +413,4 @@
 .schedule-equal-day-columns table > tbody > tr > :not(:first-child) {
   min-width: 0 !important;
   overflow-wrap: anywhere;
-}
-
-.schedule-equal-day-columns table th {
-  border-color: color-mix(in srgb, var(--border) 90%, transparent);
-  color: color-mix(in srgb, var(--foreground) 84%, var(--background));
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.schedule-equal-day-columns table td {
-  border-color: color-mix(in srgb, var(--border) 90%, transparent);
-  color: var(--foreground);
-}
-
-/* Weekly schedule overtime badge. */
-table[class*="min-w-[1080px]"] button.relative:has(> span > span:nth-child(2)) {
-  padding-top: 1.15rem;
-}
-
-table[class*="min-w-[1080px]"] button.relative > span > span:nth-child(2) {
-  position: absolute;
-  top: 0.125rem;
-  right: 0.125rem;
-  display: inline-flex;
-  align-items: center;
-  min-height: 1rem;
-  margin: 0;
-  padding: 0.1rem 0.3rem;
-  border: 1px solid color-mix(in srgb, var(--background) 75%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--foreground) 92%, transparent);
-  color: var(--background);
-  font-size: 0.625rem;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
 }
