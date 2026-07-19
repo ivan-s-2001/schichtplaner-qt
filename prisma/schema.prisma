@@ -4,21 +4,25 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  schemas  = ["public", "schedule"]
 }
 
+// Read-only compatibility view over public.users. No personal data is stored
+// in the schedule schema.
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
+  id            String    @id @db.Uuid
+  email         String?
   passwordHash  String?
   firstName     String
   lastName      String
+  patronymic    String?
   nickname      String?
   phone         String?
   profileImage  String?
-  locale        String    @default("ru")
+  locale        String
   emailVerified DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime
+  updatedAt     DateTime
 
   memberships   OrganizationMember[]
   notes         EmployeeNote[]       @relation("subject")
@@ -28,36 +32,22 @@ model User {
   absences      Absence[]
   modRequests   ModRequest[]
   liveLogs      LiveLog[]
+  dayOffs       ScheduleDayOff[]
 
   @@map("users")
+  @@schema("schedule")
 }
 
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-
-  @@map("sessions")
-}
-
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token])
-  @@map("verification_tokens")
-}
-
+// Read-only view over the single Outline workspace. It is retained only as a
+// compatibility projection for existing scheduling code, not as stored data.
 model Organization {
-  id                 String             @id @default(cuid())
+  id                 String             @id @db.Uuid
   name               String
   address            String?
-  nameFormat         NameFormat         @default(LASTNAME_FIRSTNAME)
-  scheduleVisibility ScheduleVisibility @default(ALL)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  nameFormat         NameFormat
+  scheduleVisibility ScheduleVisibility
+  createdAt          DateTime
+  updatedAt          DateTime
   deletedAt          DateTime?
 
   members           OrganizationMember[]
@@ -70,23 +60,26 @@ model Organization {
   holidays          Holiday[]
 
   @@map("organizations")
+  @@schema("schedule")
 }
 
+// Read-only view over public.users.
 model OrganizationMember {
-  id              String   @id @default(cuid())
-  organizationId  String
-  userId          String
-  role            OrgRole  @default(EMPLOYEE)
-  isActive        Boolean  @default(true)
-  isActivated     Boolean  @default(false)
-  activationToken String?  @unique
-  joinedAt        DateTime @default(now())
+  id              String   @id @db.Uuid
+  organizationId  String   @db.Uuid
+  userId          String   @db.Uuid
+  role            OrgRole
+  isActive        Boolean
+  isActivated     Boolean
+  activationToken String?
+  joinedAt        DateTime
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
 
   @@unique([organizationId, userId])
   @@map("organization_members")
+  @@schema("schedule")
 }
 
 enum OrgRole {
@@ -94,6 +87,8 @@ enum OrgRole {
   ADMIN
   MANAGER
   EMPLOYEE
+
+  @@schema("schedule")
 }
 
 enum NameFormat {
@@ -102,58 +97,68 @@ enum NameFormat {
   LASTNAME
   FIRSTNAME
   NICKNAME
+
+  @@schema("schedule")
 }
 
 enum ScheduleVisibility {
   ALL
   OWN_ONLY
+
+  @@schema("schedule")
 }
 
 model Branch {
   id             String   @id @default(cuid())
-  organizationId String
+  organizationId String   @db.Uuid
   name           String
   address        String?
   createdAt      DateTime @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
   schedules    Schedule[]
 
   @@map("branches")
+  @@schema("schedule")
 }
 
+// Read-only view over public.groups. Group UUID is the department UUID.
 model Division {
-  id             String   @id @default(cuid())
-  organizationId String
+  id             String   @id @db.Uuid
+  organizationId String   @db.Uuid
   title          String
   description    String?
-  color          String   @default("#6366f1")
-  isSystem       Boolean  @default(false)
-  createdAt      DateTime @default(now())
+  color          String
+  isSystem       Boolean
+  createdAt      DateTime
   deletedAt      DateTime?
 
-  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [organizationId], references: [id])
   members      DivisionMember[]
   schedules    Schedule[]
   shifts       Shift[]
 
   @@map("divisions")
+  @@schema("schedule")
 }
 
+// Read-only view over public.group_users.
 model DivisionMember {
-  divisionId String
-  userId     String
+  divisionId String @db.Uuid
+  userId     String @db.Uuid
 
-  division Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  division Division @relation(fields: [divisionId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
 
   @@id([divisionId, userId])
   @@map("division_members")
+  @@schema("schedule")
 }
 
 model Schedule {
   id             String         @id @default(cuid())
-  organizationId String
-  divisionId     String?
+  organizationId String         @db.Uuid
+  divisionId     String?        @db.Uuid
   branchId       String?
   weekNumber     Int
   year           Int
@@ -165,84 +170,105 @@ model Schedule {
   updatedAt      DateTime       @updatedAt
   deletedAt      DateTime?
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
   division     Division?    @relation(fields: [divisionId], references: [id])
   branch       Branch?      @relation(fields: [branchId], references: [id])
   shifts       Shift[]
   liveSession  LiveSession?
+  dayNotes     ScheduleDayNote[]
+  dayOffs      ScheduleDayOff[]
 
   @@unique([organizationId, divisionId, weekNumber, year, branchId])
   @@index([organizationId, divisionId, year, weekNumber])
   @@map("schedules")
+  @@schema("schedule")
 }
 
 enum ScheduleLayout {
   LAYOUT_1
   LAYOUT_2
+
+  @@schema("schedule")
 }
 
 model Shift {
-  id           String      @id @default(cuid())
-  scheduleId   String
-  divisionId   String?
-  dayOfWeek    Int
-  shiftFrom    String
-  shiftTo      String
-  maxEmployees Int         @default(1)
-  pauseOption  PauseOption @default(PER_HOUR)
-  pauseValue   Int         @default(0)
-  title        String?
-  description  String?
-  createdAt    DateTime    @default(now())
-  deletedAt    DateTime?
+  id                  String      @id @default(cuid())
+  scheduleId          String
+  divisionId          String?     @db.Uuid
+  dayOfWeek           Int
+  shiftFrom           String
+  shiftTo             String
+  maxEmployees        Int         @default(1)
+  pauseOption         PauseOption @default(PER_HOUR)
+  pauseValue          Int         @default(0)
+  title               String?
+  description         String?
+  poolTemplateCode    String?
+  poolLabel           String?
+  poolColor           String?
+  poolTextColor       String?
+  poolDescription     String?
+  createdAt           DateTime    @default(now())
+  deletedAt           DateTime?
 
   schedule    Schedule     @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   division    Division?    @relation(fields: [divisionId], references: [id])
   bookings    Booking[]
   modRequests ModRequest[]
 
+  @@index([poolTemplateCode])
   @@map("shifts")
+  @@schema("schedule")
 }
 
 enum PauseOption {
   PER_HOUR
   PER_SHIFT
+
+  @@schema("schedule")
 }
 
 model Booking {
-  id        String   @id @default(cuid())
-  shiftId   String
-  userId    String
-  bookedAt  DateTime @default(now())
-  bookedBy  String?
+  id                    String   @id @default(cuid())
+  shiftId               String
+  userId                String   @db.Uuid
+  bookedAt              DateTime @default(now())
+  bookedBy              String?  @db.Uuid
+  overtimeMinutes       Int      @default(0)
+  overtimeBeforeMinutes Int      @default(0)
+  overtimeAfterMinutes  Int      @default(0)
 
   shift Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
 
   @@unique([shiftId, userId])
   @@map("bookings")
+  @@schema("schedule")
 }
 
 model ModRequest {
   id       String       @id @default(cuid())
   shiftId  String
-  userId   String
+  userId   String       @db.Uuid
   state    RequestState @default(OPEN)
   note     String?
   deadline DateTime?
   sentAt   DateTime     @default(now())
 
   shift Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
 
   @@unique([shiftId, userId])
   @@map("mod_requests")
+  @@schema("schedule")
 }
 
 enum RequestState {
   OPEN
   ACCEPTED
   DECLINED
+
+  @@schema("schedule")
 }
 
 model LiveSession {
@@ -260,6 +286,7 @@ model LiveSession {
   logs     LiveLog[]
 
   @@map("live_sessions")
+  @@schema("schedule")
 }
 
 model LiveDay {
@@ -272,13 +299,14 @@ model LiveDay {
 
   @@unique([liveSessionId, dayOfWeek])
   @@map("live_days")
+  @@schema("schedule")
 }
 
 model LiveLog {
   id            String     @id @default(cuid())
   liveSessionId String
   shiftId       String
-  userId        String
+  userId        String     @db.Uuid
   action        LiveAction
   loggedAt      DateTime   @default(now())
 
@@ -286,16 +314,19 @@ model LiveLog {
   user        User        @relation(fields: [userId], references: [id])
 
   @@map("live_logs")
+  @@schema("schedule")
 }
 
 enum LiveAction {
   BOOK
   UNBOOK
+
+  @@schema("schedule")
 }
 
 model TimeRecord {
   id              String         @id @default(cuid())
-  userId          String
+  userId          String         @db.Uuid
   date            DateTime       @db.Date
   timeFrom        String?
   timeTo          String?
@@ -307,33 +338,37 @@ model TimeRecord {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User          @relation(fields: [userId], references: [id])
   category TimeCategory? @relation(fields: [categoryId], references: [id])
 
   @@map("time_records")
+  @@schema("schedule")
 }
 
 enum TimeRecordType {
   MANUAL
   WATCH
   MANUAL_DURATION
+
+  @@schema("schedule")
 }
 
 model TimeCategory {
   id             String  @id @default(cuid())
-  organizationId String
+  organizationId String  @db.Uuid
   name           String
   enabled        Boolean @default(true)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
   records      TimeRecord[]
 
   @@map("time_categories")
+  @@schema("schedule")
 }
 
 model TimeSettings {
   id               String    @id @default(cuid())
-  organizationId   String    @unique
+  organizationId   String    @unique @db.Uuid
   trackingOptions  String?
   watchAutoStop    Boolean   @default(false)
   warningsEnabled  Boolean   @default(false)
@@ -341,19 +376,22 @@ model TimeSettings {
   whoCanUse        WhoCanUse @default(ALL)
   useCategories    Boolean   @default(false)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@map("time_settings")
+  @@schema("schedule")
 }
 
 enum WhoCanUse {
   ALL
   CHOOSE
+
+  @@schema("schedule")
 }
 
 model Absence {
   id         String        @id @default(cuid())
-  userId     String
+  userId     String        @db.Uuid
   categoryId String
   dateFrom   DateTime      @db.Date
   dateTo     DateTime      @db.Date
@@ -361,53 +399,114 @@ model Absence {
   status     AbsenceStatus @default(PENDING)
   createdAt  DateTime      @default(now())
 
-  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User            @relation(fields: [userId], references: [id])
   category AbsenceCategory @relation(fields: [categoryId], references: [id])
 
   @@map("absences")
+  @@schema("schedule")
 }
 
 enum AbsenceStatus {
   PENDING
   APPROVED
   DECLINED
+
+  @@schema("schedule")
 }
 
 model AbsenceCategory {
   id             String  @id @default(cuid())
-  organizationId String
+  organizationId String  @db.Uuid
   name           String
   color          String  @default("#ef4444")
   isPaid         Boolean @default(true)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
   absences     Absence[]
 
   @@map("absence_categories")
+  @@schema("schedule")
 }
 
 model Holiday {
   id             String   @id @default(cuid())
-  organizationId String
+  organizationId String   @db.Uuid
   name           String
   date           DateTime @db.Date
   country        String   @default("DE")
   state          String?
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@map("holidays")
+  @@schema("schedule")
 }
 
 model EmployeeNote {
   id        String   @id @default(cuid())
-  subjectId String
-  authorId  String
+  subjectId String   @db.Uuid
+  authorId  String   @db.Uuid
   text      String
   createdAt DateTime @default(now())
 
-  subject User @relation("subject", fields: [subjectId], references: [id], onDelete: Cascade)
+  subject User @relation("subject", fields: [subjectId], references: [id])
   author  User @relation("author", fields: [authorId], references: [id])
 
   @@map("employee_notes")
+  @@schema("schedule")
+}
+
+model ScheduleDayNote {
+  id        String   @id
+  scheduleId String
+  dayOfWeek Int
+  note      String
+  status    String   @default("PLANNED")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleId, dayOfWeek])
+  @@map("schedule_day_notes")
+  @@schema("schedule")
+}
+
+model ScheduleDayOff {
+  id        String   @id
+  scheduleId String
+  userId    String   @db.Uuid
+  dayOfWeek Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([scheduleId, userId, dayOfWeek])
+  @@index([userId])
+  @@map("schedule_day_offs")
+  @@schema("schedule")
+}
+
+model ShiftPoolTemplate {
+  id             String   @id
+  organizationId String   @db.Uuid
+  code           String
+  name           String
+  shiftFrom      String
+  shiftTo        String
+  color          String
+  textColor      String   @default("#111827")
+  description    String?
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId, sortOrder])
+  @@map("shift_pool_templates")
+  @@schema("schedule")
 }
