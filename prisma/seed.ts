@@ -3,10 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error("DATABASE_URL is not configured");
-}
+if (!connectionString) throw new Error("DATABASE_URL is not configured");
 
 const adapter = new PrismaPg(
   { connectionString },
@@ -15,77 +12,55 @@ const adapter = new PrismaPg(
 const db = new PrismaClient({ adapter });
 
 async function main() {
-  console.log("Первоначальное заполнение базы...");
-
-  const organization = await db.organization.create({
-    data: {
-      name: "QuickTickets",
-      nameFormat: "LASTNAME_FIRSTNAME",
-      scheduleVisibility: "ALL",
-    },
-  });
-  console.log(`  Создана организация: ${organization.name}`);
-
-  const admin = await db.user.create({
-    data: {
-      email: "admin@qksr.ru",
-      firstName: "Иван",
-      lastName: "Юрин",
-      locale: "ru",
-      emailVerified: new Date(),
-    },
+  const workspace = await db.organization.findFirst({
+    where: { deletedAt: null },
+    orderBy: { createdAt: "asc" },
   });
 
-  await db.organizationMember.create({
-    data: {
-      organizationId: organization.id,
-      userId: admin.id,
-      role: "OWNER",
-      isActive: true,
-      isActivated: true,
-    },
-  });
+  if (!workspace) {
+    console.log("Outline workspace отсутствует; seed пропущен.");
+    return;
+  }
 
-  await db.timeCategory.createMany({
-    data: [
-      {
-        organizationId: organization.id,
-        name: "Обычное время",
-        enabled: true,
-      },
-      {
-        organizationId: organization.id,
-        name: "Сверхурочные",
-        enabled: true,
-      },
-      {
-        organizationId: organization.id,
-        name: "Ночная работа",
-        enabled: true,
-      },
-    ],
+  const existingTimeCategories = await db.timeCategory.count({
+    where: { organizationId: workspace.id },
   });
+  if (existingTimeCategories === 0) {
+    await db.timeCategory.createMany({
+      data: [
+        { organizationId: workspace.id, name: "Обычное время", enabled: true },
+        { organizationId: workspace.id, name: "Сверхурочные", enabled: true },
+        { organizationId: workspace.id, name: "Ночная работа", enabled: true },
+      ],
+    });
+  }
 
-  await db.absenceCategory.createMany({
-    data: [
-      {
-        organizationId: organization.id,
-        name: "Отпуск",
-        color: "#FFFFFF",
-        isPaid: true,
-      },
-      {
-        organizationId: organization.id,
-        name: "Больничный",
-        color: "#FEE2E2",
-        isPaid: true,
-      },
-    ],
+  const existingAbsenceCategories = await db.absenceCategory.count({
+    where: { organizationId: workspace.id },
   });
+  if (existingAbsenceCategories === 0) {
+    await db.absenceCategory.createMany({
+      data: [
+        {
+          organizationId: workspace.id,
+          name: "Отпуск",
+          color: "#FFFFFF",
+          isPaid: true,
+        },
+        {
+          organizationId: workspace.id,
+          name: "Больничный",
+          color: "#FEE2E2",
+          isPaid: true,
+        },
+      ],
+    });
+  }
 
-  await db.timeSettings.create({
-    data: {
-      organizationId: organization.id,
+  await db.timeSettings.upsert({
+    where: { organizationId: workspace.id },
+    create: {
+      organizationId: workspace.id,
       trackingOptions: "MANUAL,WATCH",
       watchAutoStop: false,
       warningsEnabled: true,
@@ -93,17 +68,14 @@ async function main() {
       whoCanUse: "ALL",
       useCategories: true,
     },
+    update: {},
   });
 
-  console.log("Первоначальное заполнение завершено.");
-  console.log("Локальный владелец: Юрин Иван <admin@qksr.ru>");
-  console.log("В рабочей связке пользователи синхронизируются из Outline.");
+  console.log("Рабочие справочники расписания заполнены.");
 }
 
 main()
-  .then(async () => {
-    await db.$disconnect();
-  })
+  .then(async () => db.$disconnect())
   .catch(async (error) => {
     console.error(error);
     await db.$disconnect();
