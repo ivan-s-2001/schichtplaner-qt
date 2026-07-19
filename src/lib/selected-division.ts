@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { resolveOutlineDivision } from "@/lib/outline-integration";
+import { resolveOutlineDivision } from "@/lib/outline-division-access";
 
 export const DIVISION_COOKIE_NAME = "scheduleDivisionId";
 
