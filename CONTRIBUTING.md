@@ -1,111 +1,156 @@
-# Contributing to Schichtplaner
+# Contributing to Outline + Schedule
 
-Thanks for your interest in contributing! Here's everything you need to get started.
+Schedule является частью связки из двух репозиториев:
 
-## Prerequisites
+- `ivan-s-2001/Outline-osp` — пользователи, рабочие пространства, вход и миграции общей базы;
+- `ivan-s-2001/schichtplaner-qt` — интерфейс и бизнес-логика графиков.
 
-- Node.js 20+
-- Docker & Docker Compose
-- Git
+## Требования
 
-## Setting Up Your Development Environment
+Для штатного запуска нужны:
 
-```bash
-# Fork and clone the repository
-git clone https://github.com/YOUR_USERNAME/schichtplaner.git
-cd schichtplaner
+- Git;
+- Docker Desktop с Docker Compose.
 
-# Install dependencies
-npm install
+Локальные Node.js, PostgreSQL, Redis и Prisma CLI для обычного запуска не требуются.
 
-# Start services
-docker compose up -d postgres redis minio
+## Установка
 
-# Set up the database
-cp .env.example .env
-npx prisma migrate dev
-npx prisma db seed
+Репозитории должны находиться рядом:
 
-# Start the dev server
-npm run dev
+```text
+C:\OSPanel\home\
+├── outline.qt.local\
+└── schedule.qt.local\
 ```
 
-## Workflow
+Запуск:
 
-1. **Create an issue** — describe the problem or feature
-2. **Create a branch** — `git checkout -b feature/my-feature` or `fix/my-bugfix`
-3. **Develop** — write code, test your changes
-4. **Verify** — `npm run lint && npx tsc --noEmit`
-5. **Pull request** — open a PR against `main`
-
-## Conventions
-
-### Code
-
-- **Language:** UI text is German, code and variables are English
-- **Validation:** Zod schemas for all API inputs
-- **API pattern:** `getCurrentMember()` → role check → Zod validation → Prisma query
-- **Imports:** `@/*` alias maps to `./src/*`
-
-### Commits
-
-We use conventional commit messages:
-
-```
-feat: new feature
-fix: bug fix
-docs: documentation
-refactor: code refactoring
-chore: maintenance, dependencies
+```powershell
+Set-Location C:\OSPanel\home\schedule.qt.local
+.\docker-symbiosis-up.bat
 ```
 
-### Branches
+Запуск текущей ветки без автоматического обновления `main`:
 
-- `main` — stable branch
-- `feature/*` — new features
-- `fix/*` — bug fixes
+```powershell
+.\docker-symbiosis-up.bat --offline
+```
 
-## Modifying the Database Schema
+Основные адреса:
 
-```bash
-# Edit the schema in prisma/schema.prisma
-# Create a migration
-npx prisma migrate dev --name describe_the_change
+- `https://outline.qt.local`;
+- `https://schedule.qt.local`;
+- `http://localhost:8025` — Mailpit.
 
-# Regenerate the Prisma client
+## Рабочий процесс
+
+1. Создайте issue или зафиксируйте техническую задачу.
+2. Создайте одинаково названные ветки в обоих репозиториях, если меняется интеграционный контракт.
+3. Не добавляйте `.env`, `.env.symbiosis`, сертификаты и приватные данные.
+4. Выполните проверки.
+5. Откройте связанные PR в оба репозитория.
+6. Сначала проверьте совместный Docker-запуск, затем сливайте обе части.
+
+## Проверки Schedule
+
+```powershell
+npm ci --legacy-peer-deps
 npx prisma generate
+npm run sso:check
+npx tsc --noEmit
+npm run build
+docker build -t schedule-local-check .
 ```
 
-## Creating a New API Route
+Проверка интеграционного стека:
 
-Every API route follows this pattern:
-
-```typescript
-import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
-import { NextResponse } from "next/server";
-import { z } from "zod";
-import { prisma } from "@/lib/db";
-
-const schema = z.object({
-  // Zod schema here
-});
-
-export async function POST(request: Request) {
-  const member = await getCurrentMember();
-  if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!isManagerOrAbove(member.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-  const body = await request.json();
-  const data = schema.parse(body);
-
-  const result = await prisma.model.create({
-    data: { ...data, organizationId: member.organizationId },
-  });
-
-  return NextResponse.json(result);
-}
+```powershell
+.\docker-symbiosis-check.bat
 ```
 
-## Questions?
+## Владение базой данных
 
-Open an [issue](https://github.com/lennystepn-hue/schichtplaner/issues) — we're happy to help.
+Единственный владелец миграций общей базы — Outline.
+
+Нельзя выполнять в Schedule:
+
+```text
+prisma migrate dev
+prisma migrate deploy
+prisma migrate reset
+prisma db push
+```
+
+При изменении схемы:
+
+1. обновите `prisma/schema.prisma` как клиентское описание;
+2. добавьте Sequelize-миграцию в `Outline-osp/server/migrations`;
+3. добавьте её в `Outline-osp/server/scripts/export-schedule-migration-sql.js`;
+4. обновите schema-contract проверки в обоих репозиториях;
+5. выполните `npx prisma generate` только для генерации клиента.
+
+Schedule не должен создавать собственную историю Prisma migrations.
+
+## Авторизация
+
+Outline является единственной точкой входа. Контракт SSO должен сохранять:
+
+- алгоритм `HS256`;
+- `typ=JWT`;
+- `iss=outline`;
+- `aud=schichtplaner`;
+- UUID пользователя и workspace;
+- срок действия не более пяти минут; issuer использует 60 секунд;
+- уникальный одноразовый `jti`;
+- общий стабильный `SCHEDULE_SSO_SECRET`.
+
+При изменении SSO обязательно обновляйте issuer Outline, verifier Schedule и `npm run sso:check`.
+
+## API
+
+Каждый mutating route должен:
+
+1. получить текущего пользователя через `getCurrentMember()`;
+2. проверить роль и workspace;
+3. валидировать вход через Zod или эквивалентную строгую проверку;
+4. ограничить запрос `organizationId/teamId` текущего пользователя;
+5. не доверять идентификаторам workspace, присланным клиентом;
+6. возвращать корректные коды `401`, `403`, `404` и `422/400`.
+
+## Realtime
+
+Socket.IO работает через `server.cjs` и `/api/ws`.
+
+Нельзя:
+
+- принимать произвольный `orgId` от клиента;
+- разрешать произвольную ретрансляцию событий;
+- подключать к комнате графика без проверки workspace;
+- запускать production через стандартный `next start`, обходя custom server.
+
+## HTTPS и browser messaging
+
+TLS завершается на Caddy из `docker-compose.symbiosis.yml`.
+
+- публичные URL всегда HTTPS;
+- внутренний трафик контейнеров может быть HTTP;
+- `X-Forwarded-Proto` должен передаваться Outline;
+- `SECRET_KEY` и Auth.js secrets нельзя ротировать при пересборке;
+- `postMessage` должен использовать точный origin, не `*`;
+- Schedule разрешается в iframe только origin Outline.
+
+## Коммиты и ветки
+
+Рекомендуемые префиксы:
+
+```text
+feat: новая возможность
+fix: исправление
+security: усиление безопасности
+docs: документация
+refactor: переработка без изменения поведения
+chore: обслуживание
+```
+
+Основная ветка — `main`. Рабочие ветки — `feature/*` и `fix/*`.
