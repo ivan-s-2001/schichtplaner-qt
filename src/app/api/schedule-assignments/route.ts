@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getSelectedDivision } from "@/lib/selected-division";
 import { emitToOrg, emitToSchedule } from "@/lib/emit";
 
 const overtimeHoursSchema = z.number().min(0).max(24).multipleOf(0.5);
@@ -50,7 +51,7 @@ type ShiftPoolRow = {
   description: string | null;
 };
 
-async function requireManager() {
+async function requireManager(request: NextRequest) {
   const member = await getCurrentMember();
 
   if (!member) {
@@ -65,12 +66,28 @@ async function requireManager() {
     };
   }
 
-  return { member };
+  const division = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+
+  if (!division) {
+    return {
+      error: NextResponse.json(
+        { error: "Сначала выберите отдел Outline" },
+        { status: 400 }
+      ),
+    };
+  }
+
+  return { member, division };
 }
 
 async function removeExistingAssignment(
   tx: Prisma.TransactionClient,
   scheduleId: string,
+  divisionId: string,
   userId: string,
   dayOfWeek: number
 ) {
@@ -79,6 +96,7 @@ async function removeExistingAssignment(
       userId,
       shift: {
         scheduleId,
+        divisionId,
         dayOfWeek,
         deletedAt: null,
       },
@@ -113,7 +131,7 @@ async function removeExistingAssignment(
 }
 
 export async function POST(request: NextRequest) {
-  const access = await requireManager();
+  const access = await requireManager(request);
   if ("error" in access) return access.error;
 
   let body: unknown;
@@ -131,7 +149,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { member } = access;
+  const { member, division } = access;
   const {
     scheduleId,
     userId,
@@ -163,7 +181,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Смена отсутствует в пуле" }, { status: 400 });
   }
 
-  const [schedule, targetMember] = await Promise.all([
+  const [schedule, targetMember, divisionMembership] = await Promise.all([
     db.schedule.findFirst({
       where: {
         id: scheduleId,
@@ -181,14 +199,26 @@ export async function POST(request: NextRequest) {
       },
       select: { id: true },
     }),
+    db.divisionMember.findUnique({
+      where: {
+        divisionId_userId: {
+          divisionId: division.id,
+          userId,
+        },
+      },
+      select: { userId: true },
+    }),
   ]);
 
   if (!schedule) {
     return NextResponse.json({ error: "График не найден" }, { status: 404 });
   }
 
-  if (!targetMember) {
-    return NextResponse.json({ error: "Сотрудник не найден" }, { status: 404 });
+  if (!targetMember || !divisionMembership) {
+    return NextResponse.json(
+      { error: "Сотрудник не состоит в выбранном отделе" },
+      { status: 404 }
+    );
   }
 
   const legacyAfterHours =
@@ -202,12 +232,19 @@ export async function POST(request: NextRequest) {
   const overtimeMinutes = overtimeBeforeMinutes + overtimeAfterMinutes;
 
   const result = await db.$transaction(async (tx) => {
-    await removeExistingAssignment(tx, scheduleId, userId, dayOfWeek);
+    await removeExistingAssignment(
+      tx,
+      scheduleId,
+      division.id,
+      userId,
+      dayOfWeek
+    );
 
     const title = `pool:${template.code}`;
     let shift = await tx.shift.findFirst({
       where: {
         scheduleId,
+        divisionId: division.id,
         dayOfWeek,
         shiftFrom: template.shiftFrom,
         shiftTo: template.shiftTo,
@@ -220,7 +257,7 @@ export async function POST(request: NextRequest) {
       shift = await tx.shift.create({
         data: {
           scheduleId,
-          divisionId: null,
+          divisionId: division.id,
           dayOfWeek,
           shiftFrom: template.shiftFrom,
           shiftTo: template.shiftTo,
@@ -272,12 +309,14 @@ export async function POST(request: NextRequest) {
 
   emitToOrg(member.organizationId, "schedule:updated", {
     scheduleId,
+    divisionId: division.id,
     action: "assignment_changed",
     userId,
     dayOfWeek,
   });
   emitToSchedule(scheduleId, "schedule:updated", {
     scheduleId,
+    divisionId: division.id,
     action: "assignment_changed",
     userId,
     dayOfWeek,
@@ -287,7 +326,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const access = await requireManager();
+  const access = await requireManager(request);
   if ("error" in access) return access.error;
 
   let body: unknown;
@@ -305,34 +344,60 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
-  const { member } = access;
+  const { member, division } = access;
   const { scheduleId, userId, dayOfWeek } = parsed.data;
 
-  const schedule = await db.schedule.findFirst({
-    where: {
-      id: scheduleId,
-      organizationId: member.organizationId,
-      deletedAt: null,
-    },
-    select: { id: true },
-  });
+  const [schedule, divisionMembership] = await Promise.all([
+    db.schedule.findFirst({
+      where: {
+        id: scheduleId,
+        organizationId: member.organizationId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    }),
+    db.divisionMember.findUnique({
+      where: {
+        divisionId_userId: {
+          divisionId: division.id,
+          userId,
+        },
+      },
+      select: { userId: true },
+    }),
+  ]);
 
   if (!schedule) {
     return NextResponse.json({ error: "График не найден" }, { status: 404 });
   }
 
+  if (!divisionMembership) {
+    return NextResponse.json(
+      { error: "Сотрудник не состоит в выбранном отделе" },
+      { status: 403 }
+    );
+  }
+
   await db.$transaction((tx) =>
-    removeExistingAssignment(tx, scheduleId, userId, dayOfWeek)
+    removeExistingAssignment(
+      tx,
+      scheduleId,
+      division.id,
+      userId,
+      dayOfWeek
+    )
   );
 
   emitToOrg(member.organizationId, "schedule:updated", {
     scheduleId,
+    divisionId: division.id,
     action: "assignment_removed",
     userId,
     dayOfWeek,
   });
   emitToSchedule(scheduleId, "schedule:updated", {
     scheduleId,
+    divisionId: division.id,
     action: "assignment_removed",
     userId,
     dayOfWeek,
