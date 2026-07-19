@@ -32,7 +32,7 @@ $content = @"
 NODE_ENV=production
 SECRET_KEY=$(New-HexSecret 32)
 UTILS_SECRET=$(New-HexSecret 32)
-DEFAULT_LANGUAGE=ru_RU
+DEFAULT_LANGUAGE=en_US
 
 SMTP_HOST=mailpit
 SMTP_PORT=1025
