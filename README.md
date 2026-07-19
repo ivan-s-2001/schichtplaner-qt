@@ -1,345 +1,424 @@
-<p align="center">
-  <h1 align="center">Schichtplaner</h1>
-  <p align="center">
-    Open-source shift planning software with AI assistance
-    <br />
-    <em>Self-Hosted &middot; Real-Time Collaboration &middot; AI-Powered Optimization</em>
-  </p>
-  <p align="center">
-    <a href="https://github.com/lennystepn-hue/schichtplaner/blob/main/LICENSE">
-      <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" />
-    </a>
-    <img src="https://img.shields.io/badge/Next.js-16-black?logo=next.js" alt="Next.js 16" />
-    <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react" alt="React 19" />
-    <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript" alt="TypeScript" />
-    <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql" alt="PostgreSQL" />
-    <img src="https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma" alt="Prisma" />
-    <img src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker" alt="Docker" />
-  </p>
-</p>
+# Outline + Schedule
+
+Единая локальная установка Outline и сервиса расписаний.
+
+Оба приложения запускаются **только через Docker Compose**. Open Server Panel, локальные Node.js, PostgreSQL, Redis, npm, yarn и Prisma для запуска не требуются.
+
+Каталог `C:\OSPanel\home` используется только как обычное место хранения проектов.
+
+## Состав установки
+
+Docker Compose запускает пять контейнеров:
+
+- `outline` — база знаний и основной вход пользователей;
+- `schedule` — графики подразделений;
+- `postgres` — единая база данных `outline`;
+- `redis` — служебное хранилище Outline и Schedule;
+- `mailpit` — локальная почта для входа в Outline.
+
+В PostgreSQL используются две схемы:
+
+- `public` — данные Outline и пользователей;
+- `schedule` — данные графиков, смен, подразделений и баланса времени.
+
+Личные данные пользователей не копируются в схему `schedule`.
 
 ---
 
-**Schichtplaner** (German for "shift planner") is a fully-featured, self-hosted solution for shift scheduling and workforce management. Built with a modern tech stack, it covers everything from shift planning and time tracking to AI-powered schedule optimization — with no dependency on external SaaS services.
+## 1. Требования
 
-> **Note:** The application UI is in German. Internationalization (i18n) support is planned for future releases.
+Установите и запустите:
 
-## Features
+- Git;
+- Docker Desktop с поддержкой Docker Compose.
 
-### Shift Planning
+Проверка в PowerShell:
 
-- **Flexible weekly schedules** — create shifts with division assignments
-- **4 schedule views** — Flexible, Classic, Employee-centric, Monthly overview
-- **Live sessions** — real-time shift booking via Socket.IO with deadline controls
-- **Wish plans (Mod-Requests)** — employees can submit shift preferences
-- **PDF export** — download schedules as PDF
-- **Briefings** — weekly briefings per schedule
-
-### Employee Management
-
-- **Role system** — Owner > Admin > Manager > Employee
-- **Divisions** — color-coded divisions with member assignment
-- **Activation links** — secure invitation via token
-- **Target hours** — individual weekly hour goals per employee
-- **Notes** — internal employee notes (manager+ only)
-
-### Time Tracking
-
-- **3 tracking modes** — Manual (from/to), Stopwatch (live tracking), Manual duration
-- **Categories** — configurable time categories per organization
-- **Warnings** — automatic alerts when exceeding maximum hours
-- **Access control** — enable time tracking for all or selected employees
-
-### Absence Management
-
-- **Categories** — vacation, sick leave, and custom categories
-- **Approval workflow** — Pending → Approved / Declined
-- **Holidays** — holiday management with regional support (German federal states)
-
-### Reporting
-
-- **Monthly reports** — working hours per employee at a glance
-- **Target/actual comparison** — automatic comparison with target hours
-- **PDF export** — download reports as PDF
-
-### Internal Portal
-
-- **Messaging** — internal messaging with reply threads
-- **File management** — folder structure with upload (S3/MinIO)
-- **Discussion forum** — topics with posts for cross-team communication
-
-### AI Features (optional)
-
-> Requires an [Anthropic API key](https://console.anthropic.com/). All AI features are feature-gated and can be disabled per organization.
-
-- **Auto-Planner** — AI-powered schedule suggestions based on availability
-- **Anomaly detection** — automatic detection of unusual patterns
-- **Smart Briefing** — AI-generated weekly summaries
-- **Forecasting** — demand predictions based on historical data
-- **Chat** — AI assistant for planning questions
-
-### Additional Features
-
-- **Multi-tenancy** — multiple organizations on a single instance
-- **Dark mode** — theme switching
-- **Real-time updates** — Socket.IO for live changes
-- **Responsive** — fully mobile-optimized
-- **German UI** — complete German user interface
-
-## Tech Stack
-
-| Category | Technology |
-|----------|------------|
-| Framework | Next.js 16 (App Router) |
-| Frontend | React 19, Tailwind CSS 4, shadcn/ui, Radix UI |
-| Language | TypeScript 5 |
-| Database | PostgreSQL 16, Prisma 7 ORM |
-| Auth | NextAuth.js v5 (JWT, Credentials) |
-| Real-time | Socket.IO |
-| AI | Anthropic SDK (Claude) |
-| State | Zustand + React Query |
-| File Storage | MinIO / S3-compatible |
-| Caching | Redis |
-| Deployment | Docker + Caddy (Auto-HTTPS) |
-
-## Database Schema
-
-The complete schema contains **23 models**. Here's an overview of the core relationships:
-
-```mermaid
-erDiagram
-    User ||--o{ OrganizationMember : "member of"
-    User ||--o{ Booking : "books"
-    User ||--o{ TimeRecord : "tracks"
-    User ||--o{ Absence : "requests"
-
-    Organization ||--o{ OrganizationMember : "has"
-    Organization ||--o{ Division : "divisions"
-    Organization ||--o{ Schedule : "schedules"
-    Organization ||--o{ Branch : "branches"
-    Organization ||--|| OrgSettings : "AI settings"
-
-    Schedule ||--o{ Shift : "shifts"
-    Schedule ||--o| LiveSession : "live"
-
-    Shift ||--o{ Booking : "bookings"
-    Shift }o--o| Division : "division"
-
-    Division ||--o{ DivisionMember : "members"
-
-    LiveSession ||--o{ LiveDay : "days"
-    LiveSession ||--o{ LiveLog : "logs"
-
-    Message }o--o| Message : "reply to"
-    Message ||--o{ MessageRecipient : "recipients"
-
-    Topic ||--o{ TopicPost : "posts"
-
-    User {
-        string email UK
-        string firstName
-        string lastName
-        string locale
-    }
-
-    Organization {
-        string name
-        enum nameFormat
-        enum scheduleVisibility
-    }
-
-    OrganizationMember {
-        enum role "OWNER|ADMIN|MANAGER|EMPLOYEE"
-        boolean isActive
-        float targetHoursPerWeek
-    }
-
-    Schedule {
-        int weekNumber
-        int year
-        boolean isPublic
-    }
-
-    Shift {
-        int dayOfWeek
-        string shiftFrom
-        string shiftTo
-        int maxEmployees
-    }
-
-    Booking {
-        datetime bookedAt
-    }
-
-    TimeRecord {
-        date date
-        string timeFrom
-        string timeTo
-        enum type "MANUAL|WATCH|DURATION"
-    }
-
-    Absence {
-        date dateFrom
-        date dateTo
-        enum status "PENDING|APPROVED|DECLINED"
-    }
-
-    OrgSettings {
-        boolean aiEnabled
-        boolean aiAutoPlanner
-        boolean aiChatEnabled
-        boolean aiForecast
-    }
+```powershell
+git --version
+docker version
+docker compose version
 ```
 
-> See the full ER diagram with all 23 models at [`docs/db-schema.md`](docs/db-schema.md).
+Open Server Panel запускать не нужно.
 
-## Quick Start
+---
 
-### Prerequisites
+## 2. Клонирование проектов
 
-- [Node.js](https://nodejs.org/) 20+
-- [Docker](https://www.docker.com/) & Docker Compose
-- (Optional) [Anthropic API key](https://console.anthropic.com/) for AI features
+Все команды ниже выполняются в **PowerShell**.
 
-### 1. Clone the repository
+Перейдите в каталог проектов:
 
-```bash
-git clone https://github.com/lennystepn-hue/schichtplaner.git
-cd schichtplaner
+```powershell
+Set-Location C:\OSPanel\home
 ```
 
-### 2. Configure environment variables
+Клонируйте Outline строго в `outline.qt.local`:
 
-```bash
-cp .env.example .env
+```powershell
+git clone https://github.com/ivan-s-2001/Outline-osp.git .\outline.qt.local
 ```
 
-Edit the `.env` file:
+Клонируйте Schedule строго в `schedule.qt.local`:
+
+```powershell
+git clone https://github.com/ivan-s-2001/schichtplaner-qt.git .\schedule.qt.local
+```
+
+После клонирования структура должна быть такой:
+
+```text
+C:\OSPanel\home\
+├── outline.qt.local\
+│   ├── package.json
+│   ├── Dockerfile.symbiosis
+│   └── ...
+└── schedule.qt.local\
+    ├── docker-compose.symbiosis.yml
+    ├── docker-symbiosis-up.bat
+    ├── docker-symbiosis-check.bat
+    ├── docker-symbiosis-down.bat
+    └── ...
+```
+
+Папки должны находиться рядом. Переименовывать их нельзя, потому что Docker Compose использует относительный путь `..\outline.qt.local`.
+
+---
+
+## 3. Первый запуск
+
+Перейдите в Schedule:
+
+```powershell
+Set-Location C:\OSPanel\home\schedule.qt.local
+```
+
+Запустите весь комплект:
+
+```powershell
+.\docker-symbiosis-up.bat
+```
+
+Скрипт автоматически:
+
+1. создаст `C:\OSPanel\home\schedule.qt.local\.env.symbiosis`;
+2. сгенерирует случайные пароли и секреты;
+3. создаст `C:\OSPanel\home\outline.qt.local\.env`;
+4. соберёт Docker-образы Outline и Schedule;
+5. запустит PostgreSQL, Redis и Mailpit;
+6. запустит миграции Outline;
+7. создаст и обновит схему `schedule`;
+8. запустит оба приложения;
+9. проверит контейнеры, базу данных и HTTP-адреса;
+10. откроет Outline в браузере.
+
+Вручную выполнять следующие команды **не нужно**:
+
+```text
+npm install
+yarn install
+npm run dev
+prisma migrate
+prisma db push
+sequelize db:migrate
+```
+
+Все зависимости устанавливаются внутри Docker-образов. Миграции запускает контейнер Outline.
+
+---
+
+## 4. Адреса сервисов
+
+После успешного запуска:
+
+| Сервис | Адрес |
+|---|---|
+| Outline | `http://localhost:3000` |
+| Schedule | `http://localhost:41873` |
+| Mailpit | `http://localhost:8025` |
+
+Schedule следует открывать через пункт **«Расписание»** в боковом меню Outline. Прямой вход по email в Schedule отключён.
+
+---
+
+## 5. Первый вход в Outline
+
+1. Откройте `http://localhost:3000`.
+2. Введите свой email.
+3. Откройте Mailpit: `http://localhost:8025`.
+4. Откройте письмо от Outline.
+5. Перейдите по ссылке входа из письма.
+6. Завершите создание рабочего пространства Outline.
+
+Mailpit не отправляет письма в интернет. Все письма остаются внутри локального Docker-контейнера и показываются в веб-интерфейсе Mailpit.
+
+---
+
+## 6. Первичная настройка расписания
+
+После входа под администратором Outline:
+
+1. откройте **Настройки**;
+2. перейдите в **Подразделения**;
+3. создайте подразделение;
+4. выберите тип графика:
+   - `SHIFT` — сменный график;
+   - `STABLE` — стабильный личный график;
+5. назначьте руководителя подразделения;
+6. назначьте сотрудников;
+7. при необходимости задайте дневную и недельную нормы часов;
+8. откройте **Расписание** в боковом меню Outline.
+
+У одного сотрудника может быть только одно основное подразделение.
+
+---
+
+## 7. Проверка установки
+
+```powershell
+Set-Location C:\OSPanel\home\schedule.qt.local
+.\docker-symbiosis-check.bat
+```
+
+Проверка подтверждает:
+
+- работу контейнеров;
+- наличие схем `public` и `schedule`;
+- представление `schedule.users` над пользователями Outline;
+- независимую таблицу `schedule.divisions`;
+- внешние ключи на `public.users` и `public.teams`;
+- доступность Outline, Schedule и Mailpit.
+
+Посмотреть состояние контейнеров вручную:
+
+```powershell
+docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml ps
+```
+
+---
+
+## 8. Просмотр журналов
+
+Все журналы:
+
+```powershell
+Set-Location C:\OSPanel\home\schedule.qt.local
+docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml logs -f
+```
+
+Только Outline и Schedule:
+
+```powershell
+docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml logs -f outline schedule
+```
+
+Последние 200 строк:
+
+```powershell
+docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml logs --tail=200 outline schedule postgres redis mailpit
+```
+
+Выход из режима просмотра журналов:
+
+```text
+Ctrl+C
+```
+
+Контейнеры при этом продолжат работать.
+
+---
+
+## 9. Остановка
+
+Остановить контейнеры без удаления данных:
+
+```powershell
+Set-Location C:\OSPanel\home\schedule.qt.local
+.\docker-symbiosis-down.bat
+```
+
+Команда сохраняет:
+
+- базу PostgreSQL;
+- документы и вложения Outline;
+- данные Redis;
+- настройки и расписания.
+
+Для повторного запуска:
+
+```powershell
+.\docker-symbiosis-up.bat
+```
+
+---
+
+## 10. Перезапуск сервисов
+
+Перезапустить Outline и Schedule без пересборки:
+
+```powershell
+Set-Location C:\OSPanel\home\schedule.qt.local
+docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml restart outline schedule
+```
+
+Перезапустить весь комплект:
+
+```powershell
+docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml restart
+```
+
+---
+
+## 11. Обновление проектов
+
+Сначала обновите Outline:
+
+```powershell
+Set-Location C:\OSPanel\home\outline.qt.local
+git pull origin main
+```
+
+Затем обновите Schedule:
+
+```powershell
+Set-Location C:\OSPanel\home\schedule.qt.local
+git pull origin main
+```
+
+Пересоберите и запустите контейнеры:
+
+```powershell
+.\docker-symbiosis-up.bat
+```
+
+Скрипт использует `docker compose up -d --build`, поэтому изменённые приложения будут пересобраны. Существующие Docker volumes и данные сохранятся.
+
+---
+
+## 12. Изменение портов
+
+Порты находятся в файле:
+
+```text
+C:\OSPanel\home\schedule.qt.local\.env.symbiosis
+```
+
+Стандартные значения:
 
 ```env
-DATABASE_URL="postgresql://schichtplaner:schichtplaner@localhost:5432/schichtplaner"
-NEXTAUTH_SECRET="your-secret-key"             # openssl rand -base64 32
-NEXTAUTH_URL="http://localhost:3000"
-ANTHROPIC_API_KEY="sk-ant-..."                # Optional, for AI features
-REDIS_URL="redis://localhost:6379"
-S3_ENDPOINT="http://localhost:9000"
-S3_ACCESS_KEY="minioadmin"
-S3_SECRET_KEY="minioadmin"
-S3_BUCKET="schichtplaner"
-APP_URL="http://localhost:3000"
+OUTLINE_URL=http://localhost:3000
+OUTLINE_PORT=3000
+
+SCHEDULE_URL=http://localhost:41873
+SCHEDULE_PORT=41873
+
+MAILPIT_PORT=8025
 ```
 
-### 3. Start services (PostgreSQL, Redis, MinIO)
+При изменении порта Outline одновременно измените `OUTLINE_URL` и `OUTLINE_PORT`.
 
-```bash
-docker compose up -d postgres redis minio
+При изменении порта Schedule одновременно измените `SCHEDULE_URL` и `SCHEDULE_PORT`.
+
+После изменения выполните:
+
+```powershell
+Set-Location C:\OSPanel\home\schedule.qt.local
+.\docker-symbiosis-up.bat
 ```
-
-### 4. Install dependencies & set up database
-
-```bash
-npm install
-npx prisma migrate dev
-npx prisma db seed
-```
-
-### 5. Start the development server
-
-```bash
-# Terminal 1: Next.js
-npm run dev
-
-# Terminal 2: Socket.IO server (for real-time features)
-npm run dev:server
-```
-
-Open [http://localhost:3000](http://localhost:3000).
-
-**Demo login:**
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | `admin@demo.de` | `password123` |
-
-## Docker Deployment (Production)
-
-For a full production setup with automatic HTTPS:
-
-```bash
-# Configure production environment
-cp .env.production.example .env
-
-# Start all services
-docker compose up -d
-```
-
-The `docker-compose.yml` automatically starts:
-- **PostgreSQL 16** — database
-- **Redis 7** — caching
-- **MinIO** — file storage (S3-compatible)
-- **Next.js App** — application (port 3000)
-- **Caddy** — reverse proxy with auto-HTTPS (Let's Encrypt)
-
-## Project Structure
-
-```
-schichtplaner/
-├── prisma/
-│   ├── schema.prisma         # Database schema (23 models)
-│   └── seed.ts               # Demo data
-├── src/
-│   ├── app/
-│   │   ├── (auth)/           # Login, registration, activation
-│   │   ├── (dashboard)/      # All protected pages
-│   │   │   ├── schedule/     # Shift planning (4 views)
-│   │   │   ├── employees/    # Employee management
-│   │   │   ├── divisions/    # Divisions
-│   │   │   ├── time/         # Time tracking
-│   │   │   ├── reporting/    # Reports
-│   │   │   ├── portal/       # Messages, files, forum
-│   │   │   ├── ai/           # AI chat & insights
-│   │   │   └── settings/     # Settings
-│   │   └── api/              # REST API (50+ endpoints)
-│   ├── components/
-│   │   ├── ui/               # shadcn/ui primitives
-│   │   ├── schedule/         # Schedule components
-│   │   ├── layout/           # Sidebar, navigation
-│   │   └── ...               # Feature-specific components
-│   └── lib/
-│       ├── auth.ts           # NextAuth configuration
-│       ├── db.ts             # Prisma singleton
-│       ├── ai/               # Claude AI integration
-│       ├── hooks/            # Custom React hooks
-│       └── socket.ts         # Socket.IO client
-├── server.ts                 # Socket.IO server
-├── docker-compose.yml        # Docker orchestration
-├── Dockerfile                # Multi-stage production build
-└── Caddyfile                 # Reverse proxy config
-```
-
-## Scripts
-
-```bash
-npm run dev              # Next.js dev server
-npm run build            # Production build
-npm run lint             # ESLint
-npm run dev:server       # Socket.IO server (watch mode)
-npx prisma migrate dev   # Database migrations
-npx prisma generate      # Regenerate Prisma client
-npx prisma db seed       # Load demo data
-npx tsc --noEmit         # TypeScript type check
-```
-
-## Contributing
-
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our workflow.
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
 
 ---
 
-<p align="center">
-  Built with Next.js, React, Prisma, and lots of coffee.
-</p>
+## 13. Полный сброс
+
+> Команда ниже безвозвратно удаляет базу, пользователей, документы, подразделения и расписания.
+
+```powershell
+Set-Location C:\OSPanel\home\schedule.qt.local
+docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml down -v --remove-orphans
+```
+
+Чтобы также создать новые секреты при следующем запуске:
+
+```powershell
+Remove-Item .\.env.symbiosis -Force
+Remove-Item ..\outline.qt.local\.env -Force
+.\docker-symbiosis-up.bat
+```
+
+Не удаляйте `.env` и `.env.symbiosis` при обычном обновлении или перезапуске.
+
+---
+
+## 14. Типовые ошибки
+
+### Docker не найден
+
+Проверьте, что Docker Desktop запущен:
+
+```powershell
+docker version
+```
+
+### Не найден Outline
+
+Проверьте наличие файла:
+
+```text
+C:\OSPanel\home\outline.qt.local\package.json
+```
+
+Обе папки должны находиться непосредственно внутри `C:\OSPanel\home`.
+
+### Порт занят
+
+Пример проверки порта `3000`:
+
+```powershell
+Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue
+```
+
+Проверьте также порты `41873` и `8025` либо измените их в `.env.symbiosis`.
+
+### Outline не запускается
+
+```powershell
+Set-Location C:\OSPanel\home\schedule.qt.local
+docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml logs --tail=200 outline postgres redis
+```
+
+### Schedule не запускается
+
+```powershell
+Set-Location C:\OSPanel\home\schedule.qt.local
+docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml logs --tail=200 schedule outline postgres
+```
+
+### Письмо входа не появилось
+
+Проверьте Mailpit:
+
+```text
+http://localhost:8025
+```
+
+И его журнал:
+
+```powershell
+docker compose --env-file .env.symbiosis -f docker-compose.symbiosis.yml logs --tail=100 mailpit outline
+```
+
+---
+
+## 15. Важные правила
+
+- запуск выполняется из `C:\OSPanel\home\schedule.qt.local`;
+- Open Server Panel не используется;
+- Outline и Schedule не запускаются отдельными командами Node.js;
+- база создаётся только контейнером PostgreSQL;
+- миграциями общей базы владеет Outline;
+- `prisma migrate`, `prisma db push` и ручные SQL-миграции Schedule запускать нельзя;
+- Schedule открывается через активную сессию Outline;
+- `.env` и `.env.symbiosis` нельзя добавлять в Git;
+- обычная команда `docker compose down` не удаляет данные;
+- команда `docker compose down -v` удаляет все данные установки.
