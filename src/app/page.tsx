@@ -18,7 +18,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       signature={first(params.signature)}
       token={first(params.token)}
       email={first(params.email)}
-      embedded={first(params.embed) === "1"}
     />
   );
 }
