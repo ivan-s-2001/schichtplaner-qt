@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentMember, isManagerOrAbove } from "@/lib/auth-helpers";
+import { getSelectedDivision } from "@/lib/selected-division";
 import { emitToOrg, emitToSchedule } from "@/lib/emit";
 
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -23,8 +24,7 @@ const createShiftSchema = z.object({
 /**
  * POST /api/shifts
  *
- * Create one or more shifts. If repeatDays is provided,
- * a shift is created for each specified day.
+ * Create one or more shifts in the currently selected Outline group.
  */
 export async function POST(request: NextRequest) {
   const member = await getCurrentMember();
@@ -34,6 +34,18 @@ export async function POST(request: NextRequest) {
 
   if (!isManagerOrAbove(member.role)) {
     return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
+  }
+
+  const selectedDivision = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+  if (!selectedDivision) {
+    return NextResponse.json(
+      { error: "Сначала выберите отдел Outline" },
+      { status: 400 }
+    );
   }
 
   let body: unknown;
@@ -53,7 +65,13 @@ export async function POST(request: NextRequest) {
 
   const data = parsed.data;
 
-  // Validate shiftFrom < shiftTo
+  if (data.divisionId && data.divisionId !== selectedDivision.id) {
+    return NextResponse.json(
+      { error: "Нельзя создать смену в другом отделе" },
+      { status: 403 }
+    );
+  }
+
   if (data.shiftFrom >= data.shiftTo) {
     return NextResponse.json(
       { error: "Время начала должно быть раньше времени окончания" },
@@ -61,7 +79,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Verify the schedule belongs to the member's organization
   const schedule = await db.schedule.findFirst({
     where: {
       id: data.scheduleId,
@@ -77,31 +94,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // If divisionId is provided, verify it exists in the org
-  if (data.divisionId) {
-    const division = await db.division.findFirst({
-      where: {
-        id: data.divisionId,
-        organizationId: member.organizationId,
-        deletedAt: null,
-      },
-    });
-    if (!division) {
-      return NextResponse.json(
-        { error: "Подразделение не найдено" },
-        { status: 404 }
-      );
-    }
-  }
-
-  // Determine which days to create shifts for
-  const days = data.repeatDays && data.repeatDays.length > 0
-    ? [...new Set(data.repeatDays)]
-    : [data.dayOfWeek];
+  const days =
+    data.repeatDays && data.repeatDays.length > 0
+      ? [...new Set(data.repeatDays)]
+      : [data.dayOfWeek];
 
   const shiftData = days.map((day) => ({
     scheduleId: data.scheduleId,
-    divisionId: data.divisionId ?? null,
+    divisionId: selectedDivision.id,
     dayOfWeek: day,
     shiftFrom: data.shiftFrom,
     shiftTo: data.shiftTo,
@@ -112,7 +112,6 @@ export async function POST(request: NextRequest) {
     description: data.description ?? null,
   }));
 
-  // Create all shifts in a transaction
   const shifts = await db.$transaction(
     shiftData.map((sd) =>
       db.shift.create({
@@ -139,14 +138,15 @@ export async function POST(request: NextRequest) {
     )
   );
 
-  // Broadcast real-time update
   emitToOrg(member.organizationId, "schedule:updated", {
     scheduleId: data.scheduleId,
+    divisionId: selectedDivision.id,
     action: "shift_created",
     shiftIds: shifts.map((s) => s.id),
   });
   emitToSchedule(data.scheduleId, "schedule:updated", {
     scheduleId: data.scheduleId,
+    divisionId: selectedDivision.id,
     action: "shift_created",
     shiftIds: shifts.map((s) => s.id),
   });
