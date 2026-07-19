@@ -16,8 +16,16 @@ if (Test-Path $targetPath) {
 
 function New-HexSecret([int]$bytes = 32) {
     $buffer = New-Object byte[] $bytes
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($buffer)
-    return [Convert]::ToHexString($buffer).ToLowerInvariant()
+    $generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+
+    try {
+        $generator.GetBytes($buffer)
+    }
+    finally {
+        $generator.Dispose()
+    }
+
+    return (($buffer | ForEach-Object { $_.ToString("x2") }) -join "")
 }
 
 $content = @"
@@ -41,4 +49,4 @@ SMTP_REPLY_EMAIL=Outline <outline@local.test>
     [System.Text.UTF8Encoding]::new($false)
 )
 
-Write-Host "Created $targetPath"
+Write-Host "Created $targetPath for the Docker-only installation."
