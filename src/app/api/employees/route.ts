@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   );
   if (!selectedDivision) {
     return NextResponse.json(
-      { error: "Нет доступного отдела Outline" },
+      { error: "Нет доступного подразделения" },
       { status: 403 }
     );
   }
@@ -57,11 +57,11 @@ export async function GET(request: NextRequest) {
 
   const patronymicMatches = search
     ? await db.$queryRaw<{ id: string }[]>`
-        SELECT u."id"
-        FROM "users" u
-        INNER JOIN "division_members" dm ON dm."userId" = u."id"
-        WHERE dm."divisionId" = ${selectedDivision.id}
-          AND u."patronymic" ILIKE ${`%${search}%`}
+        SELECT u."id"::text AS "id"
+        FROM schedule."users" u
+        INNER JOIN schedule."division_members" dm ON dm."userId" = u."id"
+        WHERE dm."divisionId" = CAST(${selectedDivision.id} AS uuid)
+          AND COALESCE(u."patronymic", '') ILIKE ${`%${search}%`}
       `
     : [];
   const patronymicMatchIds = patronymicMatches.map((item) => item.id);
@@ -101,10 +101,10 @@ export async function GET(request: NextRequest) {
   });
 
   const patronymics = await db.$queryRaw<PatronymicRow[]>`
-    SELECT u."id", u."patronymic"
-    FROM "users" u
-    INNER JOIN "division_members" dm ON dm."userId" = u."id"
-    WHERE dm."divisionId" = ${selectedDivision.id}
+    SELECT u."id"::text AS "id", u."patronymic"
+    FROM schedule."users" u
+    INNER JOIN schedule."division_members" dm ON dm."userId" = u."id"
+    WHERE dm."divisionId" = CAST(${selectedDivision.id} AS uuid)
   `;
   const patronymicByUser = new Map(
     patronymics.map((item) => [item.id, item.patronymic])
@@ -151,7 +151,7 @@ export async function POST() {
   return NextResponse.json(
     {
       error:
-        "Сотрудники и членство в отделах управляются группами Outline. Добавьте пользователя в Outline и нужную группу.",
+        "Сотрудники создаются в Outline, а основное подразделение назначается администратором в настройках подразделений.",
     },
     { status: 409 }
   );
