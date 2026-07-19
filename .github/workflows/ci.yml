@@ -44,6 +44,24 @@ jobs:
           exit 1
       - run: npm run build
 
+  outline-types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NODE_ENV: test
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - name: Checkout connected Outline branch
+        uses: actions/checkout@v4
+        with:
+          repository: ivan-s-2001/Outline-osp
+          ref: feature/outline-symbiosis
+      - uses: ./.github/actions/install
+      - name: TypeScript
+        run: yarn tsc
+      - name: Lint
+        run: yarn lint --quiet
+
   schema-contract:
     runs-on: ubuntu-latest
     timeout-minutes: 15
