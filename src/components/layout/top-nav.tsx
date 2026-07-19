@@ -17,6 +17,7 @@ import { UserMenu } from "./user-menu";
 import { MobileNav } from "./mobile-nav";
 import { ConnectionStatus } from "./connection-status";
 import { DivisionSwitcher } from "./division-switcher";
+import { ThemeToggle } from "./theme-toggle";
 
 const navItems = [
   { key: "schedule", icon: CalendarIcon, href: "/schedule/employee", label: "График" },
@@ -93,6 +94,7 @@ export function TopNav() {
           </Link>
 
           <ConnectionStatus />
+          <ThemeToggle />
           <UserMenu />
         </div>
       </div>
