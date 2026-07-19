@@ -96,6 +96,7 @@ services:
       HOSTNAME: 0.0.0.0
       DATABASE_URL: postgresql://outline:${POSTGRES_PASSWORD}@postgres:5432/outline
       DATABASE_SCHEMA: schedule
+      OUTLINE_URL: ${OUTLINE_URL:-https://outline.qt.local}
       NEXTAUTH_URL: ${SCHEDULE_URL:-https://schedule.qt.local}
       AUTH_URL: ${SCHEDULE_URL:-https://schedule.qt.local}
       APP_URL: ${SCHEDULE_URL:-https://schedule.qt.local}
