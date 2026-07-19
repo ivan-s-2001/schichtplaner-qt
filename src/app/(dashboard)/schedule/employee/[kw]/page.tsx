@@ -32,10 +32,10 @@ export default async function EmployeeKWPage({ params }: EmployeeKWPageProps) {
       <header className="space-y-3">
         <div>
           <h1 className="text-[26px] font-medium leading-tight text-foreground">
-            График службы заботы
+            График отдела
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Недельная таблица сотрудников и смен
+            Отдел выбирается из групп Outline в верхней панели
           </p>
         </div>
         <ViewSwitcher kw={kw} />
