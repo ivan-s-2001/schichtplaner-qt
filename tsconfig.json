@@ -19,13 +19,17 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@qt/outline-ui": ["./packages/outline-ui/src/index.ts"],
+      "@qt/outline-ui/*": ["./packages/outline-ui/src/*"]
     }
   },
   "include": [
     "next-env.d.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
