@@ -1,8 +1,7 @@
 "use client";
 
 import { signOut } from "next-auth/react";
-import { useTheme } from "next-themes";
-import { LogOut, Moon, Sun } from "lucide-react";
+import { LogOut } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,8 +16,6 @@ import { useCurrentMember } from "@/lib/hooks/use-current-member";
 
 export function UserMenu() {
   const { data: member } = useCurrentMember();
-  const { resolvedTheme, setTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
 
   const firstName = member?.user.firstName ?? "";
   const lastName = member?.user.lastName ?? "";
@@ -63,22 +60,11 @@ export function UserMenu() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          onClick={() => setTheme(isDark ? "light" : "dark")}
-        >
-          {isDark ? (
-            <Sun className="mr-2 size-4" />
-          ) : (
-            <Moon className="mr-2 size-4" />
-          )}
-          {isDark ? "Светлая тема" : "Тёмная тема"}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
           onClick={() => signOut({ callbackUrl: "/login" })}
           variant="destructive"
         >
           <LogOut className="mr-2 size-4" />
-          Abmelden
+          Выйти
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
