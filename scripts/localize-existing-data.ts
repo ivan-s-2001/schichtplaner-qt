@@ -2,23 +2,6 @@ import "dotenv/config";
 import { db } from "../src/lib/db";
 
 async function main() {
-  await db.user.updateMany({ where: { locale: "de" }, data: { locale: "ru" } });
-  await db.$executeRawUnsafe(`ALTER TABLE "users" ALTER COLUMN "locale" SET DEFAULT 'ru'`);
-
-  await db.organization.updateMany({
-    where: { name: "Demo GmbH" },
-    data: { name: "Демо-компания", address: "Примерная улица, 42" },
-  });
-
-  const divisions = [
-    ["Kasse", "Касса", "Касса и работа с клиентами"],
-    ["Lager", "Склад", "Приём, хранение и комплектация товаров"],
-    ["Service", "Обслуживание", "Консультации и обслуживание клиентов"],
-  ] as const;
-  for (const [oldTitle, title, description] of divisions) {
-    await db.division.updateMany({ where: { title: oldTitle }, data: { title, description } });
-  }
-
   const timeCategories = [
     ["Normal", "Обычное время"],
     ["Überstunden", "Сверхурочные"],
@@ -52,14 +35,8 @@ async function main() {
     data: { note: "Семейный отпуск" },
   });
 
-  await db.briefing.updateMany({
-    where: { text: { contains: "Willkommen zur KW" } },
-    data: {
-      text: "Добро пожаловать! Обратите внимание на обновлённое время перерывов. По вопросам обращайтесь к руководителю.",
-    },
-  });
-
-  console.log("Existing demo data localized to Russian.");
+  console.log("Schedule-owned demo data localized to Russian.");
+  console.log("Users, groups and workspace names remain authoritative in Outline.");
 }
 
 main()
