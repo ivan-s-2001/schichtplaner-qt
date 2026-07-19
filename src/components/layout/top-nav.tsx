@@ -3,14 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import {
-  BarChart3,
-  CalendarDays,
-  CalendarRange,
-  Clock,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DivisionSwitcher } from "./division-switcher";
 
@@ -18,7 +10,6 @@ export type ProjectMode = "schedule" | "vacations";
 export type ProjectNavItem = {
   key: "schedule" | "vacations" | "time" | "employees" | "reporting";
   label: string;
-  icon: LucideIcon;
   href: string;
 };
 
@@ -27,30 +18,19 @@ type DivisionsResponse = {
 };
 
 const scheduleItems: ProjectNavItem[] = [
-  {
-    key: "schedule",
-    label: "График",
-    icon: CalendarDays,
-    href: "/schedule/employee",
-  },
-  { key: "time", label: "Учёт времени", icon: Clock, href: "/time" },
-  { key: "employees", label: "Сотрудники", icon: Users, href: "/employees" },
+  { key: "schedule", label: "График", href: "/schedule/employee" },
+  { key: "time", label: "Учёт времени", href: "/time" },
+  { key: "employees", label: "Сотрудники", href: "/employees" },
 ];
 
 const reportingItem: ProjectNavItem = {
   key: "reporting",
   label: "Отчёты",
-  icon: BarChart3,
   href: "/reporting",
 };
 
 const vacationItems: ProjectNavItem[] = [
-  {
-    key: "vacations",
-    label: "Отпуска",
-    icon: CalendarRange,
-    href: "/vacations",
-  },
+  { key: "vacations", label: "Отпуска", href: "/vacations" },
 ];
 
 function itemIsActive(pathname: string, href: string) {
@@ -78,45 +58,45 @@ export function TopNav({ mode }: { mode: ProjectMode }) {
         : scheduleItems;
 
   return (
-    <header className="outline-native-toolbar sticky top-0 z-40">
-      <div className="mx-auto flex min-h-16 w-full max-w-[1600px] items-stretch gap-3 px-4 md:px-11">
-        <nav
-          aria-label={mode === "vacations" ? "Раздел отпусков" : "Разделы графика"}
-          className="outline-native-tabs min-w-0 flex-1 overflow-x-auto"
-        >
-          <div className="flex h-full min-w-max items-stretch gap-1">
-            {items.map((item) => {
-              const Icon = item.icon;
-              const active = itemIsActive(pathname, item.href);
+    <header className="sticky top-0 z-40 bg-background">
+      <div className="mx-auto w-full max-w-[1600px] px-4 md:px-11">
+        <div className="flex min-w-0 items-end gap-6 border-b border-[var(--outline-divider)]">
+          <nav
+            aria-label={mode === "vacations" ? "Раздел отпусков" : "Разделы графика"}
+            className="outline-native-tabs min-w-0 flex-1 overflow-x-auto"
+          >
+            <div className="flex min-w-max items-end gap-6">
+              {items.map((item) => {
+                const active = itemIsActive(pathname, item.href);
 
-              return (
-                <Link
-                  key={item.key}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "outline-native-tab relative flex min-h-16 items-center gap-2 px-3 text-sm font-medium",
-                    active
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Icon className="size-4" strokeWidth={1.8} />
-                  <span>{item.label}</span>
-                  {active && (
-                    <span
-                      aria-hidden="true"
-                      className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary"
-                    />
-                  )}
-                </Link>
-              );
-            })}
+                return (
+                  <Link
+                    key={item.key}
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "outline-native-tab relative inline-flex items-center whitespace-nowrap py-3 text-sm font-medium md:py-1.5",
+                      active
+                        ? "text-[var(--outline-text-secondary)]"
+                        : "text-[var(--outline-text-tertiary)] hover:text-[var(--outline-text-secondary)]"
+                    )}
+                  >
+                    {item.label}
+                    {active && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-x-0 -bottom-px h-[3px] rounded-[3px] bg-[var(--outline-text-secondary)]"
+                      />
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </nav>
+
+          <div className="shrink-0 pb-2.5 md:pb-1.5">
+            <DivisionSwitcher />
           </div>
-        </nav>
-
-        <div className="flex shrink-0 items-center">
-          <DivisionSwitcher />
         </div>
       </div>
     </header>
