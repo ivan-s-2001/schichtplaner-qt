@@ -6,12 +6,13 @@ import { useRouter } from "next/navigation";
 import { Loader2, LockKeyhole } from "lucide-react";
 
 interface EmailAccessGateProps {
+  token: string | null;
   email: string | null;
 }
 
 type AccessState = "checking" | "blocked";
 
-export function EmailAccessGate({ email }: EmailAccessGateProps) {
+export function EmailAccessGate({ token, email }: EmailAccessGateProps) {
   const router = useRouter();
   const [state, setState] = useState<AccessState>("checking");
 
@@ -21,13 +22,14 @@ export function EmailAccessGate({ email }: EmailAccessGateProps) {
     async function authorize() {
       await signOut({ redirect: false });
 
-      if (!email) {
+      if (!token && !email) {
         if (!cancelled) setState("blocked");
         return;
       }
 
       const result = await signIn("credentials", {
-        email,
+        token: token ?? undefined,
+        email: email ?? undefined,
         redirect: false,
       });
 
@@ -49,28 +51,26 @@ export function EmailAccessGate({ email }: EmailAccessGateProps) {
     return () => {
       cancelled = true;
     };
-  }, [email, router]);
+  }, [email, router, token]);
 
   if (state === "checking") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-        <div className="flex items-center gap-3 rounded-lg border bg-white px-5 py-4 text-sm text-slate-600 shadow-sm">
+      <main className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
+        <div className="flex items-center gap-3 rounded-lg border bg-card px-5 py-4 text-sm text-muted-foreground shadow-sm">
           <Loader2 className="size-5 animate-spin" />
-          Проверка доступа…
+          Синхронизация с Outline…
         </div>
       </main>
     );
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <section className="w-full max-w-md rounded-xl border bg-white p-8 text-center shadow-sm">
-        <LockKeyhole className="mx-auto size-10 text-red-600" />
-        <h1 className="mt-4 text-2xl font-bold text-slate-900">
-          Доступ заблокирован
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Адрес электронной почты отсутствует, не найден или отключён.
+    <main className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
+      <section className="w-full max-w-md rounded-xl border bg-card p-8 text-center shadow-sm">
+        <LockKeyhole className="mx-auto size-10 text-destructive" />
+        <h1 className="mt-4 text-2xl font-bold">Доступ заблокирован</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Откройте расписание из Outline. Ссылка входа одноразовая и действует 60 секунд.
         </p>
       </section>
     </main>
