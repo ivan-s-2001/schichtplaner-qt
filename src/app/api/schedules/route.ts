@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentMember } from "@/lib/auth-helpers";
+import { getSelectedDivision } from "@/lib/selected-division";
 import { serializeShiftTemplate } from "@/lib/schedule/shift-pool";
 
 type DayNoteRow = {
@@ -62,6 +63,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   }
 
+  const selectedDivision = await getSelectedDivision(
+    request,
+    member.userId,
+    member.organizationId
+  );
+  if (!selectedDivision) {
+    return NextResponse.json(
+      { error: "Пользователь не состоит ни в одном отделе Outline" },
+      { status: 403 }
+    );
+  }
+
   const { searchParams } = request.nextUrl;
   const kwParam = searchParams.get("kw");
   const yearParam = searchParams.get("year");
@@ -91,9 +104,10 @@ export async function GET(request: NextRequest) {
   }
 
   const orgId = member.organizationId;
+  const divisionId = selectedDivision.id;
   const include = {
     shifts: {
-      where: { deletedAt: null },
+      where: { deletedAt: null, divisionId },
       include: {
         division: {
           select: {
@@ -123,6 +137,7 @@ export async function GET(request: NextRequest) {
   let schedule = await db.schedule.findFirst({
     where: {
       organizationId: orgId,
+      divisionId,
       weekNumber,
       year,
       branchId: null,
@@ -135,6 +150,7 @@ export async function GET(request: NextRequest) {
     schedule = await db.schedule.create({
       data: {
         organizationId: orgId,
+        divisionId,
         weekNumber,
         year,
       },
@@ -142,6 +158,11 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  const divisionMembers = await db.divisionMember.findMany({
+    where: { divisionId },
+    select: { userId: true },
+  });
+  const divisionUserIds = divisionMembers.map((item) => item.userId);
   const { start: weekStart, end: weekEnd } = getWeekRange(year, weekNumber);
 
   const [dayNotes, dayOffs, absences, overtimeRows, snapshotRows] =
@@ -163,17 +184,10 @@ export async function GET(request: NextRequest) {
       `,
       db.absence.findMany({
         where: {
+          userId: { in: divisionUserIds },
           status: "APPROVED",
           dateFrom: { lte: weekEnd },
           dateTo: { gte: weekStart },
-          user: {
-            memberships: {
-              some: {
-                organizationId: orgId,
-                isActive: true,
-              },
-            },
-          },
         },
         include: {
           category: {
@@ -196,6 +210,7 @@ export async function GET(request: NextRequest) {
         FROM "bookings" b
         INNER JOIN "shifts" s ON s."id" = b."shiftId"
         WHERE s."scheduleId" = ${schedule.id}
+          AND s."divisionId" = ${divisionId}
           AND s."deletedAt" IS NULL
       `,
       db.$queryRaw<ShiftSnapshotRow[]>`
@@ -208,6 +223,7 @@ export async function GET(request: NextRequest) {
           "poolDescription"
         FROM "shifts"
         WHERE "scheduleId" = ${schedule.id}
+          AND "divisionId" = ${divisionId}
           AND "deletedAt" IS NULL
       `,
     ]);
@@ -266,6 +282,8 @@ export async function GET(request: NextRequest) {
     schedule: {
       id: schedule.id,
       organizationId: schedule.organizationId,
+      divisionId,
+      division: selectedDivision,
       weekNumber: schedule.weekNumber,
       year: schedule.year,
       isPublic: schedule.isPublic,
