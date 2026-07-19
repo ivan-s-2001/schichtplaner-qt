@@ -3,67 +3,49 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentMember, isAdminOrAbove } from "@/lib/auth-helpers";
 
-// GET /api/settings — get all settings for the org
 export async function GET() {
   const member = await getCurrentMember();
   if (!member) {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   }
-
   if (!isAdminOrAbove(member.role)) {
     return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
   }
 
-  const org = await db.organization.findUnique({
+  const organization = await db.organization.findUnique({
     where: { id: member.organizationId },
     include: {
       timeSettings: true,
-      absenceCategories: {
-        orderBy: { name: "asc" },
-      },
-      holidays: {
-        orderBy: { date: "asc" },
-      },
-      settings: true,
+      absenceCategories: { orderBy: { name: "asc" } },
+      holidays: { orderBy: { date: "asc" } },
     },
   });
 
-  if (!org) {
-    return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  if (!organization) {
+    return NextResponse.json({ error: "Организация не найдена" }, { status: 404 });
   }
 
   return NextResponse.json({
     organization: {
-      id: org.id,
-      name: org.name,
-      address: org.address,
-      nameFormat: org.nameFormat,
-      scheduleVisibility: org.scheduleVisibility,
+      id: organization.id,
+      name: organization.name,
+      address: organization.address,
+      nameFormat: organization.nameFormat,
+      scheduleVisibility: organization.scheduleVisibility,
     },
-    timeSettings: org.timeSettings ?? {
+    timeSettings: organization.timeSettings ?? {
       whoCanUse: "ALL",
       watchAutoStop: false,
       warningsEnabled: false,
       warningsMaxHours: 10,
       useCategories: false,
     },
-    absenceCategories: org.absenceCategories,
-    holidays: org.holidays,
-    orgSettings: org.settings ?? {
-      aiEnabled: true,
-      aiAutoPlanner: true,
-      aiAnomalyDetection: true,
-      aiChatEnabled: true,
-      aiForecast: true,
-      aiSmartBriefing: true,
-      smsEnabled: false,
-    },
+    absenceCategories: organization.absenceCategories,
+    holidays: organization.holidays,
   });
 }
 
-// PATCH /api/settings — update settings
 const updateSettingsSchema = z.object({
-  // Organization fields
   name: z.string().min(1).optional(),
   address: z.string().optional(),
   nameFormat: z
@@ -76,8 +58,6 @@ const updateSettingsSchema = z.object({
     ])
     .optional(),
   scheduleVisibility: z.enum(["ALL", "OWN_ONLY"]).optional(),
-
-  // Time settings
   timeSettings: z
     .object({
       whoCanUse: z.enum(["ALL", "CHOOSE"]).optional(),
@@ -87,8 +67,6 @@ const updateSettingsSchema = z.object({
       useCategories: z.boolean().optional(),
     })
     .optional(),
-
-  // Holiday location
   holidayCountry: z.string().min(2).max(2).optional(),
   holidayState: z.string().optional(),
 });
@@ -98,19 +76,13 @@ export async function PATCH(request: NextRequest) {
   if (!member) {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
   }
-
   if (!isAdminOrAbove(member.role)) {
     return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
-  }
-
-  const parsed = updateSettingsSchema.safeParse(body);
+  const parsed = updateSettingsSchema.safeParse(
+    await request.json().catch(() => null)
+  );
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Ошибка проверки данных", details: parsed.error.issues },
@@ -119,44 +91,30 @@ export async function PATCH(request: NextRequest) {
   }
 
   const data = parsed.data;
+  const organizationData: Record<string, unknown> = {};
+  if (data.name !== undefined) organizationData.name = data.name;
+  if (data.address !== undefined) organizationData.address = data.address;
+  if (data.nameFormat !== undefined) organizationData.nameFormat = data.nameFormat;
+  if (data.scheduleVisibility !== undefined) {
+    organizationData.scheduleVisibility = data.scheduleVisibility;
+  }
 
-  // Update organization fields
-  const orgUpdate: Record<string, unknown> = {};
-  if (data.name !== undefined) orgUpdate.name = data.name;
-  if (data.address !== undefined) orgUpdate.address = data.address;
-  if (data.nameFormat !== undefined) orgUpdate.nameFormat = data.nameFormat;
-  if (data.scheduleVisibility !== undefined)
-    orgUpdate.scheduleVisibility = data.scheduleVisibility;
-
-  if (Object.keys(orgUpdate).length > 0) {
+  if (Object.keys(organizationData).length > 0) {
     await db.organization.update({
       where: { id: member.organizationId },
-      data: orgUpdate,
+      data: organizationData,
     });
   }
 
-  // Update time settings
   if (data.timeSettings) {
-    const ts = data.timeSettings;
-    const tsUpdate: Record<string, unknown> = {};
-    if (ts.whoCanUse !== undefined) tsUpdate.whoCanUse = ts.whoCanUse;
-    if (ts.watchAutoStop !== undefined) tsUpdate.watchAutoStop = ts.watchAutoStop;
-    if (ts.warningsEnabled !== undefined)
-      tsUpdate.warningsEnabled = ts.warningsEnabled;
-    if (ts.warningsMaxHours !== undefined)
-      tsUpdate.warningsMaxHours = ts.warningsMaxHours;
-    if (ts.useCategories !== undefined) tsUpdate.useCategories = ts.useCategories;
-
-    if (Object.keys(tsUpdate).length > 0) {
-      await db.timeSettings.upsert({
-        where: { organizationId: member.organizationId },
-        create: {
-          organizationId: member.organizationId,
-          ...tsUpdate,
-        },
-        update: tsUpdate,
-      });
-    }
+    await db.timeSettings.upsert({
+      where: { organizationId: member.organizationId },
+      create: {
+        organizationId: member.organizationId,
+        ...data.timeSettings,
+      },
+      update: data.timeSettings,
+    });
   }
 
   return NextResponse.json({ success: true });
