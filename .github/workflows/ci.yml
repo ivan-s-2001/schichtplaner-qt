@@ -35,6 +35,8 @@ jobs:
           cache: npm
       - run: npm ci --legacy-peer-deps
       - run: npx prisma generate
+      - name: Validate Outline SSO contract
+        run: npm run sso:check
       - name: TypeScript
         id: typecheck
         continue-on-error: true
