@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import { OutlineThemeBridge } from "@/components/layout/outline-theme-bridge";
-import "./globals.css";
 import "../../packages/outline-ui/src/styles.css";
 import "../../packages/outline-ui/src/components.css";
+import "./globals.css";
 import "./outline-native.css";
 import "./schedule-editors.css";
 
