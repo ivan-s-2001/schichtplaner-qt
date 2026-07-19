@@ -16,24 +16,10 @@ function New-HexSecret([int]$bytes = 32) {
 }
 
 $content = Get-Content $templatePath -Raw
-$content = $content.Replace(
-    "replace-with-a-random-64-character-secret",
-    (New-HexSecret 32)
-)
-$content = $content.Replace(
-    "replace-with-another-random-64-character-secret",
-    (New-HexSecret 32)
-)
-$content = $content.Replace(
-    "replace-with-64-hex-characters",
-    (New-HexSecret 32)
-)
-
-# The second generic placeholder is intentionally replaced separately.
-$content = $content.Replace(
-    "UTILS_SECRET=replace-with-a-random-64-character-secret",
-    "UTILS_SECRET=$(New-HexSecret 32)"
-)
+$content = $content -replace '(?m)^SCHEDULE_SSO_SECRET=.*$', "SCHEDULE_SSO_SECRET=$(New-HexSecret 32)"
+$content = $content -replace '(?m)^NEXTAUTH_SECRET=.*$', "NEXTAUTH_SECRET=$(New-HexSecret 32)"
+$content = $content -replace '(?m)^SECRET_KEY=.*$', "SECRET_KEY=$(New-HexSecret 32)"
+$content = $content -replace '(?m)^UTILS_SECRET=.*$', "UTILS_SECRET=$(New-HexSecret 32)"
 
 [System.IO.File]::WriteAllText(
     $targetPath,
